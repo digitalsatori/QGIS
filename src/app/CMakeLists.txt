@@ -52,7 +52,6 @@ SET(QGIS_APP_SRCS
   qgsfeatureaction.cpp
   qgslabelpropertydialog.cpp
   qgslabelengineconfigdialog.cpp
-  qgslabelinggui.cpp
   qgslabelingwidget.cpp
   qgslayercapabilitiesmodel.cpp
   qgslayertreeviewindicatorprovider.cpp
@@ -65,6 +64,7 @@ SET(QGIS_APP_SRCS
   qgsmaplayerstylecategoriesmodel.cpp
   qgsmaplayerstyleguiutils.cpp
   qgsmapsavedialog.cpp
+  qgsprojectlistitemdelegate.cpp
   qgspuzzlewidget.cpp
   qgsversionmigration.cpp
   qgsrulebasedlabelingwidget.cpp
@@ -73,9 +73,10 @@ SET(QGIS_APP_SRCS
   qgsstatusbarcoordinateswidget.cpp
   qgsstatusbarmagnifierwidget.cpp
   qgsstatusbarscalewidget.cpp
+  qgstemplateprojectsmodel.cpp
   qgsvectorlayerloadstyledialog.cpp
   qgsversioninfo.cpp
-  qgswelcomepageitemsmodel.cpp
+  qgsrecentprojectsitemsmodel.cpp
   qgswelcomepage.cpp
 
   qgsmaptooladdfeature.cpp
@@ -291,7 +292,6 @@ SET (QGIS_APP_MOC_HDRS
   qgshtmlannotationdialog.h
   qgsidentifyresultsdialog.h
   qgslabelengineconfigdialog.h
-  qgslabelinggui.h
   qgslabelingwidget.h
   qgslabelpropertydialog.h
   qgslayercapabilitiesmodel.h
@@ -306,15 +306,17 @@ SET (QGIS_APP_MOC_HDRS
   qgsmaplayerstyleguiutils.h
   qgsmapsavedialog.h
   qgspuzzlewidget.h
+  qgsprojectlistitemdelegate.h
   qgsrulebasedlabelingwidget.h
   qgssnappinglayertreemodel.h
   qgssnappingwidget.h
   qgsstatusbarcoordinateswidget.h
   qgsstatusbarmagnifierwidget.h
   qgsstatusbarscalewidget.h
+  qgstemplateprojectsmodel.h
   qgsvectorlayerloadstyledialog.h
   qgsversioninfo.h
-  qgswelcomepageitemsmodel.h
+  qgsrecentprojectsitemsmodel.h
   qgswelcomepage.h
 
   qgsmaptooladdfeature.h
