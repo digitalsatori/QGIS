@@ -46,6 +46,7 @@
 #include "qgspointcloudlayer.h"
 #include "qgsvectorlayerlabeling.h"
 #include "qgslayernotesmanager.h"
+#include "qgslayernotesutils.h"
 
 #include <QMessageBox>
 
@@ -673,13 +674,13 @@ QMenu *QgsAppLayerTreeViewMenuProvider::createContextMenu()
         }
       }
 
-      QAction *notes = new QAction( QgsLayerNotesManager::layerHasNotes( layer ) ? tr( "Edit Layer Notes…" ) : tr( "Add Layer Notes…" ), menu );
+      QAction *notes = new QAction( QgsLayerNotesUtils::layerHasNotes( layer ) ? tr( "Edit Layer Notes…" ) : tr( "Add Layer Notes…" ), menu );
       connect( notes, &QAction::triggered, this, [layer ]
       {
         QgsLayerNotesManager::editLayerNotes( layer, QgisApp::instance() );
       } );
       menu->addAction( notes );
-      if ( QgsLayerNotesManager::layerHasNotes( layer ) )
+      if ( QgsLayerNotesUtils::layerHasNotes( layer ) )
       {
         QAction *notes = new QAction( tr( "Remove Layer Notes" ), menu );
         connect( notes, &QAction::triggered, this, [layer ]
@@ -688,7 +689,10 @@ QMenu *QgsAppLayerTreeViewMenuProvider::createContextMenu()
                                       tr( "Remove Layer Notes" ),
                                       tr( "Are you sure you want to remove all notes for the layer “%1”?" ).arg( layer->name() ),
                                       QMessageBox::Yes | QMessageBox::No, QMessageBox::No ) == QMessageBox::Yes )
-            QgsLayerNotesManager::removeNotes( layer );
+          {
+            QgsLayerNotesUtils::removeNotes( layer );
+            QgsProject::instance()->setDirty( true );
+          }
         } );
         menu->addAction( notes );
       }
@@ -1178,24 +1182,7 @@ void QgsAppLayerTreeViewMenuProvider::toggleLabels( bool enabled )
     if ( enabled && !vlayer->labeling() )
     {
       // no labeling setup - create default labeling for layer
-      QgsPalLayerSettings settings;
-      settings.fieldName = vlayer->displayField();
-      switch ( vlayer->geometryType() )
-      {
-        case QgsWkbTypes::PointGeometry:
-        case QgsWkbTypes::PolygonGeometry:
-          settings.placement = QgsPalLayerSettings::AroundPoint;
-          break;
-
-        case QgsWkbTypes::LineGeometry:
-          settings.placement = QgsPalLayerSettings::Line;
-          break;
-
-        case QgsWkbTypes::UnknownGeometry:
-        case QgsWkbTypes::NullGeometry:
-          break;
-      }
-
+      QgsPalLayerSettings settings = QgsAbstractVectorLayerLabeling::defaultSettingsForLayer( vlayer );
       vlayer->setLabeling( new QgsVectorLayerSimpleLabeling( settings ) );
       vlayer->setLabelsEnabled( true );
     }

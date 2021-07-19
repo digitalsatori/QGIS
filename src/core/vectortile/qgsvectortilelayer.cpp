@@ -424,7 +424,9 @@ bool QgsVectorTileLayer::loadDefaultStyle( QString &error, QStringList &warnings
 
       for ( int resolution = 2; resolution > 0; resolution-- )
       {
-        QNetworkRequest request = QNetworkRequest( QUrl( spriteUriBase + QStringLiteral( "%1.json" ).arg( resolution > 1 ? QStringLiteral( "@%1x" ).arg( resolution ) : QString() ) ) );
+        QUrl spriteUrl = QUrl( spriteUriBase );
+        spriteUrl.setPath( spriteUrl.path() + QStringLiteral( "%1.json" ).arg( resolution > 1 ? QStringLiteral( "@%1x" ).arg( resolution ) : QString() ) );
+        QNetworkRequest request = QNetworkRequest( spriteUrl );
         QgsSetRequestInitiatorClass( request, QStringLiteral( "QgsVectorTileLayer" ) )
         QgsBlockingNetworkRequest networkRequest;
         switch ( networkRequest.get( request ) )
@@ -435,10 +437,10 @@ bool QgsVectorTileLayer::loadDefaultStyle( QString &error, QStringList &warnings
             const QVariantMap spriteDefinition = QgsJsonUtils::parseJson( content.content() ).toMap();
 
             // retrieve sprite images
-            QNetworkRequest request = QNetworkRequest( QUrl( spriteUriBase + QStringLiteral( "%1.png" ).arg( resolution > 1 ? QStringLiteral( "@%1x" ).arg( resolution ) : QString() ) ) );
-
+            QUrl spriteUrl = QUrl( spriteUriBase );
+            spriteUrl.setPath( spriteUrl.path() + QStringLiteral( "%1.png" ).arg( resolution > 1 ? QStringLiteral( "@%1x" ).arg( resolution ) : QString() ) );
+            QNetworkRequest request = QNetworkRequest( spriteUrl );
             QgsSetRequestInitiatorClass( request, QStringLiteral( "QgsVectorTileLayer" ) )
-
             QgsBlockingNetworkRequest networkRequest;
             switch ( networkRequest.get( request ) )
             {
@@ -605,10 +607,11 @@ QString QgsVectorTileLayer::htmlMetadata() const
   info += QStringLiteral( "<tr><td class=\"highlight\">" ) % tr( "Source path" ) % QStringLiteral( "</td><td>%1" ).arg( QStringLiteral( "<a href=\"%1\">%2</a>" ).arg( QUrl( url ).toString(), sourcePath() ) ) + QStringLiteral( "</td></tr>\n" );
 
   info += QStringLiteral( "<tr><td class=\"highlight\">" ) % tr( "Zoom levels" ) % QStringLiteral( "</td><td>" ) % QStringLiteral( "%1 - %2" ).arg( sourceMinZoom() ).arg( sourceMaxZoom() ) % QStringLiteral( "</td></tr>\n" );
-  info += QLatin1String( "</table>" );
 
-  // End Provider section
   info += QLatin1String( "</table>\n<br><br>" );
+
+  // CRS
+  info += crsHtmlMetadata();
 
   // Identification section
   info += QStringLiteral( "<h1>" ) % tr( "Identification" ) % QStringLiteral( "</h1>\n<hr>\n" ) %

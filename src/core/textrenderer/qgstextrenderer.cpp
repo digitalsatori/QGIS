@@ -23,7 +23,10 @@
 #include "qgspainterswapper.h"
 #include "qgsmarkersymbollayer.h"
 #include "qgssymbollayerutils.h"
+#include "qgsmarkersymbol.h"
+#include "qgsfillsymbol.h"
 
+#include <optional>
 #include <QTextBoundaryFinder>
 
 Q_GUI_EXPORT extern int qt_defaultDpiX();
@@ -265,7 +268,8 @@ QFontMetricsF QgsTextRenderer::fontMetrics( QgsRenderContext &context, const Qgs
   return QFontMetricsF( format.scaledFont( context, scaleFactor ), context.painter() ? context.painter()->device() : nullptr );
 }
 
-double QgsTextRenderer::drawBuffer( QgsRenderContext &context, const QgsTextRenderer::Component &component, const QgsTextFormat &format )
+double QgsTextRenderer::drawBuffer( QgsRenderContext &context, const QgsTextRenderer::Component &component, const QgsTextFormat &format,
+                                    DrawMode mode )
 {
   QPainter *p = context.painter();
 
@@ -291,7 +295,17 @@ double QgsTextRenderer::drawBuffer( QgsRenderContext &context, const QgsTextRend
   const double penSize = context.convertToPainterUnits( buffer.size(), buffer.sizeUnit(), buffer.sizeMapUnitScale() );
 
   const double scaleFactor = ( context.flags() & QgsRenderContext::ApplyScalingWorkaroundForTextRendering ) ? FONT_WORKAROUND_SCALE : 1.0;
+
+  std::optional< QgsScopedRenderContextReferenceScaleOverride > referenceScaleOverride;
+  if ( mode == Label )
+  {
+    // label size has already been calculated using any symbology reference scale factor -- we need
+    // to temporarily remove the reference scale here or we'll be applying the scaling twice
+    referenceScaleOverride.emplace( QgsScopedRenderContextReferenceScaleOverride( context, -1.0 ) );
+  }
+
   const QFont font = format.scaledFont( context, scaleFactor );
+  referenceScaleOverride.reset();
 
   QPainterPath path;
   path.setFillRule( Qt::WindingFill );
@@ -416,7 +430,8 @@ double QgsTextRenderer::drawBuffer( QgsRenderContext &context, const QgsTextRend
   return advance / scaleFactor;
 }
 
-void QgsTextRenderer::drawMask( QgsRenderContext &context, const QgsTextRenderer::Component &component, const QgsTextFormat &format )
+void QgsTextRenderer::drawMask( QgsRenderContext &context, const QgsTextRenderer::Component &component, const QgsTextFormat &format,
+                                DrawMode mode )
 {
   QgsTextMaskSettings mask = format.mask();
 
@@ -437,7 +452,17 @@ void QgsTextRenderer::drawMask( QgsRenderContext &context, const QgsTextRenderer
   // TODO: vertical text mode was ignored when masking feature was added.
   // Hopefully Oslandia come back and fix this? Hint hint...
 
+  std::optional< QgsScopedRenderContextReferenceScaleOverride > referenceScaleOverride;
+  if ( mode == Label )
+  {
+    // label size has already been calculated using any symbology reference scale factor -- we need
+    // to temporarily remove the reference scale here or we'll be applying the scaling twice
+    referenceScaleOverride.emplace( QgsScopedRenderContextReferenceScaleOverride( context, -1.0 ) );
+  }
+
   const QFont font = format.scaledFont( context, scaleFactor );
+  referenceScaleOverride.reset();
+
   double xOffset = 0;
   for ( const QgsTextFragment &fragment : component.block )
   {
@@ -920,7 +945,7 @@ void QgsTextRenderer::drawBackground( QgsRenderContext &context, QgsTextRenderer
         renderedSymbol->setSizeUnit( QgsUnitTypes::RenderPixels );
       }
 
-      renderedSymbol->setOpacity( background.opacity() );
+      renderedSymbol->setOpacity( renderedSymbol->opacity() * background.opacity() );
 
       // draw the actual symbol
       QgsScopedQPainterState painterState( p );
@@ -1008,60 +1033,64 @@ void QgsTextRenderer::drawBackground( QgsRenderContext &context, QgsTextRenderer
       p->translate( QPointF( xoff, yoff ) );
       p->rotate( component.rotationOffset );
 
-      double penSize = context.convertToPainterUnits( background.strokeWidth(), background.strokeWidthUnit(), background.strokeWidthMapUnitScale() );
+      QPainterPath path;
 
-      QPen pen;
-      if ( background.strokeWidth() > 0 )
-      {
-        pen.setColor( background.strokeColor() );
-        pen.setWidthF( penSize );
-        if ( background.type() == QgsTextBackgroundSettings::ShapeRectangle )
-          pen.setJoinStyle( background.joinStyle() );
-      }
-      else
-      {
-        pen = Qt::NoPen;
-      }
-
-      // store painting in QPicture for shadow drawing
-      QPicture shapePict;
-      QPainter shapep;
-      shapep.begin( &shapePict );
-      shapep.setPen( pen );
-      shapep.setBrush( background.fillColor() );
+      // Paths with curves must be enlarged before conversion to QPolygonF, or
+      // the curves are approximated too much and appear jaggy
+      QTransform t = QTransform::fromScale( 10, 10 );
+      // inverse transform used to scale created polygons back to expected size
+      QTransform ti = t.inverted();
 
       if ( background.type() == QgsTextBackgroundSettings::ShapeRectangle
            || background.type() == QgsTextBackgroundSettings::ShapeSquare )
       {
         if ( background.radiiUnit() == QgsUnitTypes::RenderPercentage )
         {
-          shapep.drawRoundedRect( rect, background.radii().width(), background.radii().height(), Qt::RelativeSize );
+          path.addRoundedRect( rect, background.radii().width(), background.radii().height(), Qt::RelativeSize );
         }
         else
         {
-          double xRadius = context.convertToPainterUnits( background.radii().width(), background.radiiUnit(), background.radiiMapUnitScale() );
-          double yRadius = context.convertToPainterUnits( background.radii().height(), background.radiiUnit(), background.radiiMapUnitScale() );
-          shapep.drawRoundedRect( rect, xRadius, yRadius );
+          const double xRadius = context.convertToPainterUnits( background.radii().width(), background.radiiUnit(), background.radiiMapUnitScale() );
+          const double yRadius = context.convertToPainterUnits( background.radii().height(), background.radiiUnit(), background.radiiMapUnitScale() );
+          path.addRoundedRect( rect, xRadius, yRadius );
         }
       }
       else if ( background.type() == QgsTextBackgroundSettings::ShapeEllipse
                 || background.type() == QgsTextBackgroundSettings::ShapeCircle )
       {
-        shapep.drawEllipse( rect );
+        path.addEllipse( rect );
       }
+      QPolygonF tempPolygon = path.toFillPolygon( t );
+      QPolygonF polygon = ti.map( tempPolygon );
+      QPicture shapePict;
+      QPainter *oldp = context.painter();
+      QPainter shapep;
+
+      shapep.begin( &shapePict );
+      context.setPainter( &shapep );
+
+      std::unique_ptr< QgsFillSymbol > renderedSymbol;
+      renderedSymbol.reset( background.fillSymbol()->clone() );
+      renderedSymbol->setOpacity( renderedSymbol->opacity() * background.opacity() );
+
+      const QgsFeature f = context.expressionContext().feature();
+      renderedSymbol->startRender( context, context.expressionContext().fields() );
+      renderedSymbol->renderPolygon( polygon, nullptr, &f, context );
+      renderedSymbol->stopRender( context );
+
       shapep.end();
+      context.setPainter( oldp );
 
       if ( format.shadow().enabled() && format.shadow().shadowPlacement() == QgsTextShadowSettings::ShadowShape )
       {
         component.picture = shapePict;
-        component.pictureBuffer = penSize / 2.0;
+        component.pictureBuffer = QgsSymbolLayerUtils::estimateMaxSymbolBleed( renderedSymbol.get(), context ) * 2;
 
         component.size = rect.size();
         component.offset = QPointF( rect.width() / 2, -rect.height() / 2 );
         drawShadow( context, component, format );
       }
 
-      p->setOpacity( background.opacity() );
       if ( context.useAdvancedEffects() )
       {
         p->setCompositionMode( background.blendMode() );
@@ -1071,6 +1100,7 @@ void QgsTextRenderer::drawBackground( QgsRenderContext &context, QgsTextRenderer
       p->scale( component.dpiRatio, component.dpiRatio );
       _fixQPictureDPI( p );
       p->drawPicture( 0, 0, shapePict );
+      p->setCompositionMode( QPainter::CompositionMode_SourceOver ); // just to be sure
       break;
     }
   }
@@ -1248,9 +1278,20 @@ void QgsTextRenderer::drawTextInternal( TextPart drawType,
   if ( !fontMetrics )
   {
     fontScale = ( context.flags() & QgsRenderContext::ApplyScalingWorkaroundForTextRendering ) ? FONT_WORKAROUND_SCALE : 1.0;
+
+    std::optional< QgsScopedRenderContextReferenceScaleOverride > referenceScaleOverride;
+    if ( mode == Label )
+    {
+      // label size has already been calculated using any symbology reference scale factor -- we need
+      // to temporarily remove the reference scale here or we'll be applying the scaling twice
+      referenceScaleOverride.emplace( QgsScopedRenderContextReferenceScaleOverride( context, -1.0 ) );
+    }
+
     const QFont f = format.scaledFont( context, fontScale );
     tmpMetrics = std::make_unique< QFontMetricsF >( f );
     fontMetrics = tmpMetrics.get();
+
+    referenceScaleOverride.reset();
   }
 
   double rotation = 0;
@@ -1385,7 +1426,14 @@ void QgsTextRenderer::drawTextInternalHorizontal( QgsRenderContext &context, con
 
   if ( mode == Rect && vAlignment != AlignTop )
   {
-    // need to calculate overall text height in advance so that we can adjust for vertical alignment
+    std::optional< QgsScopedRenderContextReferenceScaleOverride > referenceScaleOverride;
+    if ( mode == Label )
+    {
+      // label size has already been calculated using any symbology reference scale factor -- we need
+      // to temporarily remove the reference scale here or we'll be applying the scaling twice
+      referenceScaleOverride.emplace( QgsScopedRenderContextReferenceScaleOverride( context, -1.0 ) );
+    }
+
     const double overallHeight = textHeight( context, format, textLines, Rect );
     switch ( vAlignment )
     {
@@ -1400,6 +1448,7 @@ void QgsTextRenderer::drawTextInternalHorizontal( QgsRenderContext &context, con
         ascentOffset = -( component.size.height() - overallHeight ) + ascentOffset;
         break;
     }
+    referenceScaleOverride.reset();
   }
 
   for ( const QString &line : std::as_const( textLines ) )
@@ -1518,12 +1567,12 @@ void QgsTextRenderer::drawTextInternalHorizontal( QgsRenderContext &context, con
     // draw the mask below the text (for preview)
     if ( format.mask().enabled() )
     {
-      QgsTextRenderer::drawMask( context, subComponent, format );
+      QgsTextRenderer::drawMask( context, subComponent, format, mode );
     }
 
     if ( drawType == QgsTextRenderer::Buffer )
     {
-      QgsTextRenderer::drawBuffer( context, subComponent, format );
+      QgsTextRenderer::drawBuffer( context, subComponent, format, mode );
     }
     else
     {
@@ -1532,7 +1581,17 @@ void QgsTextRenderer::drawTextInternalHorizontal( QgsRenderContext &context, con
       QPainter textp;
       textp.begin( &textPict );
       textp.setPen( Qt::NoPen );
+
+      std::optional< QgsScopedRenderContextReferenceScaleOverride > referenceScaleOverride;
+      if ( mode == Label )
+      {
+        // label size has already been calculated using any symbology reference scale factor -- we need
+        // to temporarily remove the reference scale here or we'll be applying the scaling twice
+        referenceScaleOverride.emplace( QgsScopedRenderContextReferenceScaleOverride( context, -1.0 ) );
+      }
       const QFont font = format.scaledFont( context, fontScale );
+      referenceScaleOverride.reset();
+
       textp.scale( 1 / fontScale, 1 / fontScale );
 
       double xOffset = 0;
@@ -1551,7 +1610,7 @@ void QgsTextRenderer::drawTextInternalHorizontal( QgsRenderContext &context, con
         path.addText( xOffset, 0, fragmentFont, fragment.text() );
 
         QColor textColor = fragment.characterFormat().textColor().isValid() ? fragment.characterFormat().textColor() : format.color();
-        textColor.setAlphaF( format.opacity() );
+        textColor.setAlphaF( fragment.characterFormat().textColor().isValid() ? textColor.alphaF() * format.opacity() : format.opacity() );
         textp.setBrush( textColor );
         textp.drawPath( path );
 
@@ -1599,7 +1658,7 @@ void QgsTextRenderer::drawTextInternalHorizontal( QgsRenderContext &context, con
               applyExtraSpacingForLineJustification( fragmentFont, extraWordSpace * fontScale, extraLetterSpace * fontScale );
 
             QColor textColor = fragment.characterFormat().textColor().isValid() ? fragment.characterFormat().textColor() : format.color();
-            textColor.setAlphaF( format.opacity() );
+            textColor.setAlphaF( fragment.characterFormat().textColor().isValid() ? textColor.alphaF() * format.opacity() : format.opacity() );
 
             context.painter()->setPen( textColor );
             context.painter()->setFont( fragmentFont );
@@ -1625,7 +1684,17 @@ void QgsTextRenderer::drawTextInternalVertical( QgsRenderContext &context, const
   QPainter *maskPainter = context.maskPainter( context.currentMaskId() );
   const QStringList textLines = document.toPlainText();
 
+  std::optional< QgsScopedRenderContextReferenceScaleOverride > referenceScaleOverride;
+  if ( mode == Label )
+  {
+    // label size has already been calculated using any symbology reference scale factor -- we need
+    // to temporarily remove the reference scale here or we'll be applying the scaling twice
+    referenceScaleOverride.emplace( QgsScopedRenderContextReferenceScaleOverride( context, -1.0 ) );
+  }
+
   const QFont font = format.scaledFont( context, fontScale );
+  referenceScaleOverride.reset();
+
   double letterSpacing = font.letterSpacing() / fontScale;
 
   double labelWidth = fontMetrics->maxWidth() / fontScale; // label width represents the width of one line of a multi-line label
@@ -1769,7 +1838,7 @@ void QgsTextRenderer::drawTextInternalVertical( QgsRenderContext &context, const
 
       if ( drawType == QgsTextRenderer::Buffer )
       {
-        fragmentYOffset += QgsTextRenderer::drawBuffer( context, subComponent, format );
+        fragmentYOffset += QgsTextRenderer::drawBuffer( context, subComponent, format, mode );
       }
       else
       {
@@ -1791,7 +1860,7 @@ void QgsTextRenderer::drawTextInternalVertical( QgsRenderContext &context, const
         textp.begin( &textPict );
         textp.setPen( Qt::NoPen );
         QColor textColor = fragment.characterFormat().textColor().isValid() ? fragment.characterFormat().textColor() : format.color();
-        textColor.setAlphaF( format.opacity() );
+        textColor.setAlphaF( fragment.characterFormat().textColor().isValid() ? textColor.alphaF() * format.opacity() : format.opacity() );
         textp.setBrush( textColor );
         textp.scale( 1 / fontScale, 1 / fontScale );
         textp.drawPath( path );

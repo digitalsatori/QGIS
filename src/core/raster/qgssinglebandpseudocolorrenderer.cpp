@@ -90,16 +90,7 @@ QgsSingleBandPseudoColorRenderer *QgsSingleBandPseudoColorRenderer::clone() cons
 
     if ( origColorRampShader )
     {
-      QgsColorRampShader *colorRampShader = new QgsColorRampShader( mShader->minimumValue(), mShader->maximumValue() );
-
-      if ( origColorRampShader->sourceColorRamp() )
-      {
-        colorRampShader->setSourceColorRamp( origColorRampShader->sourceColorRamp()->clone() );
-      }
-      colorRampShader->setColorRampType( origColorRampShader->colorRampType() );
-      colorRampShader->setClassificationMode( origColorRampShader->classificationMode() );
-      colorRampShader->setClip( origColorRampShader->clip() );
-      colorRampShader->setColorRampItemList( origColorRampShader->colorRampItemList() );
+      QgsColorRampShader *colorRampShader = new QgsColorRampShader( *origColorRampShader );
       shader->setRasterShaderFunction( colorRampShader );
     }
   }
@@ -235,7 +226,7 @@ QgsRasterBlock *QgsSingleBandPseudoColorRenderer::block( int bandNo, QgsRectangl
     alphaBlock = inputBlock;
   }
 
-  if ( !outputBlock->reset( Qgis::ARGB32_Premultiplied, width, height ) )
+  if ( !outputBlock->reset( Qgis::DataType::ARGB32_Premultiplied, width, height ) )
   {
     return outputBlock.release();
   }

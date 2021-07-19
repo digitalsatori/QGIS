@@ -23,7 +23,13 @@ email                : morb at ozemail dot com dot au
 #include "qgsgeometry.h"
 #include "qgsgeometryeditutils.h"
 #include "qgsgeometryfactory.h"
+
+#include <geos_c.h>
+
+#if ( GEOS_VERSION_MAJOR == 3 && GEOS_VERSION_MINOR<8 )
 #include "qgsgeometrymakevalid.h"
+#endif
+
 #include "qgsgeometryutils.h"
 #include "qgsinternalgeometryengine.h"
 #include "qgsgeos.h"
@@ -530,6 +536,90 @@ bool QgsGeometry::deleteVertex( int atVertex )
   detach();
 
   return d->geometry->deleteVertex( id );
+}
+
+bool QgsGeometry::toggleCircularAtVertex( int atVertex )
+{
+
+  if ( !d->geometry )
+    return false;
+
+  QgsVertexId id;
+  if ( !vertexIdFromVertexNr( atVertex, id ) )
+    return false;
+
+  detach();
+
+  QgsAbstractGeometry *geom = d->geometry.get();
+
+  // If the geom is a collection, we get the concerned part, otherwise, the part is just the whole geom
+  QgsAbstractGeometry *part = nullptr;
+  QgsGeometryCollection *owningCollection = qgsgeometry_cast<QgsGeometryCollection *>( geom );
+  if ( owningCollection != nullptr )
+    part = owningCollection->geometryN( id.part );
+  else
+    part = geom;
+
+  // If the part is a polygon, we get the concerned ring, otherwise, the ring is just the whole part
+  QgsAbstractGeometry *ring = nullptr;
+  QgsCurvePolygon *owningPolygon = qgsgeometry_cast<QgsCurvePolygon *>( part );
+  if ( owningPolygon != nullptr )
+    ring = ( id.ring == 0 ) ? owningPolygon->exteriorRing() : owningPolygon->interiorRing( id.ring - 1 );
+  else
+    ring = part;
+
+  // If the ring is not a curve, we're probably on a point geometry
+  QgsCurve *curve = qgsgeometry_cast<QgsCurve *>( ring );
+  if ( curve == nullptr )
+    return false;
+
+  bool success = false;
+  QgsCompoundCurve *cpdCurve  = qgsgeometry_cast<QgsCompoundCurve *>( curve );
+  if ( cpdCurve != nullptr )
+  {
+    // If the geom is a already compound curve, we convert inplace, and we're done
+    success = cpdCurve->toggleCircularAtVertex( id );
+  }
+  else
+  {
+    // TODO : move this block before the above, so we call toggleCircularAtVertex only in one place
+    // If the geom is a linestring or cirularstring, we create a compound curve
+    std::unique_ptr<QgsCompoundCurve> cpdCurve = std::make_unique<QgsCompoundCurve>();
+    cpdCurve->addCurve( curve->clone() );
+    success = cpdCurve->toggleCircularAtVertex( QgsVertexId( -1, -1, id.vertex ) );
+
+    // In that case, we must also reassign the instances
+    if ( success )
+    {
+
+      if ( owningPolygon == nullptr && owningCollection == nullptr )
+      {
+        // Standalone linestring
+        reset( std::make_unique<QgsCompoundCurve>( *cpdCurve ) ); // <- REVIEW PLZ
+      }
+      else if ( owningPolygon != nullptr )
+      {
+        // Replace the ring in the owning polygon
+        if ( id.ring == 0 )
+        {
+          owningPolygon->setExteriorRing( cpdCurve.release() );
+        }
+        else
+        {
+          owningPolygon->removeInteriorRing( id.ring - 1 );
+          owningPolygon->addInteriorRing( cpdCurve.release() );
+        }
+      }
+      else if ( owningCollection != nullptr )
+      {
+        // Replace the curve in the owning collection
+        owningCollection->removeGeometry( id.part );
+        owningCollection->insertGeometry( cpdCurve.release(), id.part );
+      }
+    }
+  }
+
+  return success;
 }
 
 bool QgsGeometry::insertVertex( double x, double y, int beforeVertex )
@@ -1833,6 +1923,31 @@ double QgsGeometry::hausdorffDistanceDensify( const QgsGeometry &geom, double de
   return g.hausdorffDistanceDensify( geom.d->geometry.get(), densifyFraction, &mLastError );
 }
 
+
+double QgsGeometry::frechetDistance( const QgsGeometry &geom ) const
+{
+  if ( !d->geometry || !geom.d->geometry )
+  {
+    return -1.0;
+  }
+
+  QgsGeos g( d->geometry.get() );
+  mLastError.clear();
+  return g.frechetDistance( geom.d->geometry.get(), &mLastError );
+}
+
+double QgsGeometry::frechetDistanceDensify( const QgsGeometry &geom, double densifyFraction ) const
+{
+  if ( !d->geometry || !geom.d->geometry )
+  {
+    return -1.0;
+  }
+
+  QgsGeos g( d->geometry.get() );
+  mLastError.clear();
+  return g.frechetDistanceDensify( geom.d->geometry.get(), densifyFraction, &mLastError );
+}
+
 QgsAbstractGeometry::vertex_iterator QgsGeometry::vertices_begin() const
 {
   if ( !d->geometry || d->geometry.get()->isEmpty() )
@@ -2181,6 +2296,64 @@ QgsGeometry QgsGeometry::poleOfInaccessibility( double precision, double *distan
   return engine.poleOfInaccessibility( precision, distanceToBoundary );
 }
 
+QgsGeometry QgsGeometry::largestEmptyCircle( double tolerance,  const QgsGeometry &boundary ) const
+{
+  if ( !d->geometry )
+  {
+    return QgsGeometry();
+  }
+
+  QgsGeos geos( d->geometry.get() );
+
+  mLastError.clear();
+  QgsGeometry result( geos.largestEmptyCircle( tolerance, boundary.constGet(), &mLastError ) );
+  result.mLastError = mLastError;
+  return result;
+}
+
+QgsGeometry QgsGeometry::minimumWidth() const
+{
+  if ( !d->geometry )
+  {
+    return QgsGeometry();
+  }
+
+  QgsGeos geos( d->geometry.get() );
+
+  mLastError.clear();
+  QgsGeometry result( geos.minimumWidth( &mLastError ) );
+  result.mLastError = mLastError;
+  return result;
+}
+
+double QgsGeometry::minimumClearance() const
+{
+  if ( !d->geometry )
+  {
+    return std::numeric_limits< double >::quiet_NaN();
+  }
+
+  QgsGeos geos( d->geometry.get() );
+
+  mLastError.clear();
+  return geos.minimumClearance( &mLastError );
+}
+
+QgsGeometry QgsGeometry::minimumClearanceLine() const
+{
+  if ( !d->geometry )
+  {
+    return QgsGeometry();
+  }
+
+  QgsGeos geos( d->geometry.get() );
+
+  mLastError.clear();
+  QgsGeometry result( geos.minimumClearanceLine( &mLastError ) );
+  result.mLastError = mLastError;
+  return result;
+}
+
 QgsGeometry QgsGeometry::convexHull() const
 {
   if ( !d->geometry )
@@ -2223,6 +2396,34 @@ QgsGeometry QgsGeometry::delaunayTriangulation( double tolerance, bool edgesOnly
   QgsGeos geos( d->geometry.get() );
   mLastError.clear();
   QgsGeometry result = geos.delaunayTriangulation( tolerance, edgesOnly );
+  result.mLastError = mLastError;
+  return result;
+}
+
+QgsGeometry QgsGeometry::node() const
+{
+  if ( !d->geometry )
+  {
+    return QgsGeometry();
+  }
+
+  QgsGeos geos( d->geometry.get() );
+  mLastError.clear();
+  QgsGeometry result( geos.node( &mLastError ) );
+  result.mLastError = mLastError;
+  return result;
+}
+
+QgsGeometry QgsGeometry::sharedPaths( const QgsGeometry &other ) const
+{
+  if ( !d->geometry )
+  {
+    return QgsGeometry();
+  }
+
+  QgsGeos geos( d->geometry.get() );
+  mLastError.clear();
+  QgsGeometry result( geos.sharedPaths( other.constGet(), &mLastError ) );
   result.mLastError = mLastError;
   return result;
 }
@@ -2627,7 +2828,12 @@ QgsGeometry QgsGeometry::makeValid() const
     return QgsGeometry();
 
   mLastError.clear();
+#if GEOS_VERSION_MAJOR>3 || ( GEOS_VERSION_MAJOR == 3 && GEOS_VERSION_MINOR>=8 )
+  QgsGeos geos( d->geometry.get() );
+  std::unique_ptr< QgsAbstractGeometry > g( geos.makeValid( &mLastError ) );
+#else
   std::unique_ptr< QgsAbstractGeometry > g( _qgis_lwgeom_make_valid( d->geometry.get(), mLastError ) );
+#endif
 
   QgsGeometry result = QgsGeometry( std::move( g ) );
   result.mLastError = mLastError;
@@ -2715,6 +2921,17 @@ void QgsGeometry::validateGeometry( QVector<QgsGeometry::Error> &errors, const V
       }
     }
   }
+}
+
+void QgsGeometry::normalize()
+{
+  if ( !d->geometry )
+  {
+    return;
+  }
+
+  detach();
+  d->geometry->normalize();
 }
 
 bool QgsGeometry::isGeosValid( const QgsGeometry::ValidityFlags flags ) const

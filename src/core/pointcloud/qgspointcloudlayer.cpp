@@ -30,9 +30,9 @@
 #include "qgspointcloudrendererregistry.h"
 #include "qgspointcloudlayerelevationproperties.h"
 #include "qgsmaplayerlegend.h"
+#include "qgsxmlutils.h"
 #include "qgsmaplayerfactory.h"
 #include <QUrl>
-#include "qgseptprovider.h"
 
 QgsPointCloudLayer::QgsPointCloudLayer( const QString &uri,
                                         const QString &baseName,
@@ -44,7 +44,12 @@ QgsPointCloudLayer::QgsPointCloudLayer( const QString &uri,
   if ( !uri.isEmpty() && !providerLib.isEmpty() )
   {
     QgsDataProvider::ProviderOptions providerOptions { options.transformContext };
-    setDataSource( uri, baseName, providerLib, providerOptions, options.loadDefaultStyle );
+    QgsDataProvider::ReadFlags providerFlags = QgsDataProvider::ReadFlags();
+    if ( options.loadDefaultStyle )
+    {
+      providerFlags |= QgsDataProvider::FlagLoadDefaultStyle;
+    }
+    setDataSource( uri, baseName, providerLib, providerOptions, providerFlags );
 
     if ( !options.skipIndexGeneration && mDataProvider && mDataProvider->isValid() )
       mDataProvider.get()->generateIndex();
@@ -103,7 +108,28 @@ bool QgsPointCloudLayer::readXml( const QDomNode &layerNode, QgsReadWriteContext
   if ( !( mReadFlags & QgsMapLayer::FlagDontResolveLayers ) )
   {
     QgsDataProvider::ProviderOptions providerOptions { context.transformContext() };
-    setDataSource( mDataSource, mLayerName, mProviderKey, providerOptions, false );
+    QgsDataProvider::ReadFlags flags = QgsDataProvider::ReadFlags();
+    // read extent
+    if ( mReadFlags & QgsMapLayer::FlagReadExtentFromXml )
+    {
+      const QDomNode extentNode = layerNode.namedItem( QStringLiteral( "extent" ) );
+      if ( !extentNode.isNull() )
+      {
+        // get the extent
+        const QgsRectangle mbr = QgsXmlUtils::readRectangle( extentNode.toElement() );
+
+        // store the extent
+        setExtent( mbr );
+
+        // skip get extent
+        flags |= QgsDataProvider::SkipGetExtent;
+      }
+    }
+    if ( mReadFlags & QgsMapLayer::FlagTrustLayerMetadata )
+    {
+      flags |= QgsDataProvider::FlagTrustDataSource;
+    }
+    setDataSource( mDataSource, mLayerName, mProviderKey, providerOptions, flags );
   }
 
   if ( !isValid() )
@@ -280,8 +306,8 @@ void QgsPointCloudLayer::setTransformContext( const QgsCoordinateTransformContex
   invalidateWgs84Extent();
 }
 
-void QgsPointCloudLayer::setDataSource( const QString &dataSource, const QString &baseName, const QString &provider,
-                                        const QgsDataProvider::ProviderOptions &options, bool loadDefaultStyleFlag )
+void QgsPointCloudLayer::setDataSourcePrivate( const QString &dataSource, const QString &baseName, const QString &provider,
+    const QgsDataProvider::ProviderOptions &options, QgsDataProvider::ReadFlags flags )
 {
   if ( mDataProvider )
   {
@@ -293,18 +319,11 @@ void QgsPointCloudLayer::setDataSource( const QString &dataSource, const QString
   mProviderKey = provider;
   mDataSource = dataSource;
 
-  QgsDataProvider::ReadFlags flags = QgsDataProvider::ReadFlags();
-  if ( mReadFlags & QgsMapLayer::FlagTrustLayerMetadata )
-  {
-    flags |= QgsDataProvider::FlagTrustDataSource;
-  }
-
   mDataProvider.reset( qobject_cast<QgsPointCloudDataProvider *>( QgsProviderRegistry::instance()->createProvider( provider, dataSource, options, flags ) ) );
   if ( !mDataProvider )
   {
     QgsDebugMsg( QStringLiteral( "Unable to get point cloud data provider" ) );
     setValid( false );
-    emit dataSourceChanged();
     return;
   }
 
@@ -315,7 +334,6 @@ void QgsPointCloudLayer::setDataSource( const QString &dataSource, const QString
   if ( !isValid() )
   {
     QgsDebugMsg( QStringLiteral( "Invalid point cloud provider plugin %1" ).arg( QString( mDataSource.toUtf8() ) ) );
-    emit dataSourceChanged();
     return;
   }
 
@@ -324,7 +342,16 @@ void QgsPointCloudLayer::setDataSource( const QString &dataSource, const QString
 
   // Load initial extent, crs and renderer
   setCrs( mDataProvider->crs() );
-  setExtent( mDataProvider->extent() );
+  if ( !( flags & QgsDataProvider::SkipGetExtent ) )
+  {
+    setExtent( mDataProvider->extent() );
+  }
+
+  bool loadDefaultStyleFlag = false;
+  if ( flags & QgsDataProvider::FlagLoadDefaultStyle )
+  {
+    loadDefaultStyleFlag = true;
+  }
 
   if ( !mRenderer || loadDefaultStyleFlag )
   {
@@ -356,9 +383,6 @@ void QgsPointCloudLayer::setDataSource( const QString &dataSource, const QString
       setRenderer( QgsApplication::pointCloudRendererRegistry()->defaultRenderer( mDataProvider.get() ) );
     }
   }
-
-  emit dataSourceChanged();
-  triggerRepaint();
 }
 
 QString QgsPointCloudLayer::encodedSource( const QString &source, const QgsReadWriteContext &context ) const
@@ -441,34 +465,16 @@ QString QgsPointCloudLayer::htmlMetadata() const
     path = uriComponents[QStringLiteral( "path" )].toString();
     if ( QFile::exists( path ) )
       myMetadata += QStringLiteral( "<tr><td class=\"highlight\">" ) + tr( "Path" ) + QStringLiteral( "</td><td>%1" ).arg( QStringLiteral( "<a href=\"%1\">%2</a>" ).arg( QUrl::fromLocalFile( path ).toString(), QDir::toNativeSeparators( path ) ) ) + QStringLiteral( "</td></tr>\n" );
-  }
-  if ( uriComponents.contains( QStringLiteral( "url" ) ) )
-  {
-    const QString url = uriComponents[QStringLiteral( "url" )].toString();
-    myMetadata += QStringLiteral( "<tr><td class=\"highlight\">" ) + tr( "URL" ) + QStringLiteral( "</td><td>%1" ).arg( QStringLiteral( "<a href=\"%1\">%2</a>" ).arg( QUrl( url ).toString(), url ) ) + QStringLiteral( "</td></tr>\n" );
+    else
+      myMetadata += QStringLiteral( "<tr><td class=\"highlight\">" ) + tr( "URL" ) + QStringLiteral( "</td><td>%1" ).arg( QStringLiteral( "<a href=\"%1\">%2</a>" ).arg( QUrl( path ).toString(), path ) ) + QStringLiteral( "</td></tr>\n" );
   }
 
   // data source
   if ( publicSource() != path )
     myMetadata += QStringLiteral( "<tr><td class=\"highlight\">" ) + tr( "Source" ) + QStringLiteral( "</td><td>%1" ).arg( publicSource() ) + QStringLiteral( "</td></tr>\n" );
 
-  // EPSG
-  myMetadata += QStringLiteral( "<tr><td class=\"highlight\">" ) + tr( "CRS" ) + QStringLiteral( "</td><td>" );
-  if ( crs().isValid() )
-  {
-    myMetadata += crs().userFriendlyIdentifier( QgsCoordinateReferenceSystem::FullString ) + QStringLiteral( " - " );
-    if ( crs().isGeographic() )
-      myMetadata += tr( "Geographic" );
-    else
-      myMetadata += tr( "Projected" );
-  }
-  myMetadata += QLatin1String( "</td></tr>\n" );
-
   // Extent
   myMetadata += QStringLiteral( "<tr><td class=\"highlight\">" ) + tr( "Extent" ) + QStringLiteral( "</td><td>" ) + extent().toString() + QStringLiteral( "</td></tr>\n" );
-
-  // unit
-  myMetadata += QStringLiteral( "<tr><td class=\"highlight\">" ) + tr( "Unit" ) + QStringLiteral( "</td><td>" ) + QgsUnitTypes::toString( crs().mapUnits() ) + QStringLiteral( "</td></tr>\n" );
 
   // feature count
   QLocale locale = QLocale();
@@ -478,7 +484,13 @@ QString QgsPointCloudLayer::htmlMetadata() const
                 + tr( "Point count" ) + QStringLiteral( "</td><td>" )
                 + ( pointCount < 0 ? tr( "unknown" ) : locale.toString( static_cast<qlonglong>( pointCount ) ) )
                 + QStringLiteral( "</td></tr>\n" );
+  myMetadata += QLatin1String( "</table>\n<br><br>" );
 
+  // CRS
+  myMetadata += crsHtmlMetadata();
+
+  // provider metadata section
+  myMetadata += QStringLiteral( "<h1>" ) + tr( "Metadata" ) + QStringLiteral( "</h1>\n<hr>\n" ) + QStringLiteral( "<table class=\"list-view\">\n" );
   const QVariantMap originalMetadata = mDataProvider ? mDataProvider->originalMetadata() : QVariantMap();
 
   if ( originalMetadata.value( QStringLiteral( "creation_year" ) ).toInt() > 0 && originalMetadata.contains( QStringLiteral( "creation_doy" ) ) )
@@ -652,5 +664,5 @@ void QgsPointCloudLayer::setRenderer( QgsPointCloudRenderer *renderer )
 
   mRenderer.reset( renderer );
   emit rendererChanged();
-  emit styleChanged();
+  emitStyleChanged();
 }

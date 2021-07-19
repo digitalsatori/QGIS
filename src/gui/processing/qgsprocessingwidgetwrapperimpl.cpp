@@ -61,6 +61,7 @@
 #include "qgscheckablecombobox.h"
 #include "qgsexpressioncontext.h"
 #include "qgsexpressioncontextutils.h"
+#include "qgsdoublevalidator.h"
 #include <QToolButton>
 #include <QLabel>
 #include <QHBoxLayout>
@@ -252,6 +253,10 @@ QgsProcessingCrsParameterDefinitionWidget::QgsProcessingCrsParameterDefinitionWi
   vlayout->addWidget( new QLabel( tr( "Default value" ) ) );
 
   mCrsSelector = new QgsProjectionSelectionWidget();
+
+  // possibly we should expose this for parameter by parameter control
+  mCrsSelector->setShowAccuracyWarnings( true );
+
   if ( const QgsProcessingParameterCrs *crsParam = dynamic_cast<const QgsProcessingParameterCrs *>( definition ) )
     mCrsSelector->setCrs( QgsProcessingParameters::parameterAsCrs( crsParam, crsParam->defaultValueForGui(), context ) );
   else
@@ -643,8 +648,8 @@ QgsProcessingNumberParameterDefinitionWidget::QgsProcessingNumberParameterDefini
   if ( const QgsProcessingParameterNumber *numberParam = dynamic_cast<const QgsProcessingParameterNumber *>( definition ) )
   {
     mTypeComboBox->setCurrentIndex( mTypeComboBox->findData( numberParam->dataType() ) );
-    mMinLineEdit->setText( QString::number( numberParam->minimum() ) );
-    mMaxLineEdit->setText( QString::number( numberParam->maximum() ) );
+    mMinLineEdit->setText( QLocale().toString( numberParam->minimum() ) );
+    mMaxLineEdit->setText( QLocale().toString( numberParam->maximum() ) );
     mDefaultLineEdit->setText( numberParam->defaultValueForGui().toString() );
   }
 
@@ -654,18 +659,18 @@ QgsProcessingNumberParameterDefinitionWidget::QgsProcessingNumberParameterDefini
 QgsProcessingParameterDefinition *QgsProcessingNumberParameterDefinitionWidget::createParameter( const QString &name, const QString &description, QgsProcessingParameterDefinition::Flags flags ) const
 {
   bool ok;
-  double val = mDefaultLineEdit->text().toDouble( &ok );
+  double val = QgsDoubleValidator::toDouble( mDefaultLineEdit->text(), &ok );
 
   QgsProcessingParameterNumber::Type dataType = static_cast< QgsProcessingParameterNumber::Type >( mTypeComboBox->currentData().toInt() );
   auto param = std::make_unique< QgsProcessingParameterNumber >( name, description, dataType, ok ? val : QVariant() );
 
-  val = mMinLineEdit->text().toDouble( &ok );
+  val = QgsDoubleValidator::toDouble( mMinLineEdit->text( ), &ok );
   if ( ok )
   {
     param->setMinimum( val );
   }
 
-  val = mMaxLineEdit->text().toDouble( &ok );
+  val = QgsDoubleValidator::toDouble( mMaxLineEdit->text(), &ok );
   if ( ok )
   {
     param->setMaximum( val );
@@ -986,8 +991,8 @@ QgsProcessingDistanceParameterDefinitionWidget::QgsProcessingDistanceParameterDe
 
   if ( const QgsProcessingParameterDistance *distParam = dynamic_cast<const QgsProcessingParameterDistance *>( definition ) )
   {
-    mMinLineEdit->setText( QString::number( distParam->minimum() ) );
-    mMaxLineEdit->setText( QString::number( distParam->maximum() ) );
+    mMinLineEdit->setText( QLocale().toString( distParam->minimum() ) );
+    mMaxLineEdit->setText( QLocale().toString( distParam->maximum() ) );
     mDefaultLineEdit->setText( distParam->defaultValueForGui().toString() );
   }
 
@@ -997,17 +1002,17 @@ QgsProcessingDistanceParameterDefinitionWidget::QgsProcessingDistanceParameterDe
 QgsProcessingParameterDefinition *QgsProcessingDistanceParameterDefinitionWidget::createParameter( const QString &name, const QString &description, QgsProcessingParameterDefinition::Flags flags ) const
 {
   bool ok;
-  double val = mDefaultLineEdit->text().toDouble( &ok );
+  double val = QgsDoubleValidator::toDouble( mDefaultLineEdit->text(), &ok );
 
   auto param = std::make_unique< QgsProcessingParameterDistance >( name, description, ok ? val : QVariant(), mParentLayerComboBox->currentData().toString() );
 
-  val = mMinLineEdit->text().toDouble( &ok );
+  val = QgsDoubleValidator::toDouble( mMinLineEdit->text(), &ok );
   if ( ok )
   {
     param->setMinimum( val );
   }
 
-  val = mMaxLineEdit->text().toFloat( &ok );
+  val = QgsDoubleValidator::toDouble( mMaxLineEdit->text(), &ok );
   if ( ok )
   {
     param->setMaximum( val );
@@ -1320,8 +1325,8 @@ QgsProcessingRangeParameterDefinitionWidget::QgsProcessingRangeParameterDefiniti
   {
     mTypeComboBox->setCurrentIndex( mTypeComboBox->findData( rangeParam->dataType() ) );
     const QList< double > range = QgsProcessingParameters::parameterAsRange( rangeParam, rangeParam->defaultValueForGui(), context );
-    mMinLineEdit->setText( QString::number( range.at( 0 ) ) );
-    mMaxLineEdit->setText( QString::number( range.at( 1 ) ) );
+    mMinLineEdit->setText( QLocale().toString( range.at( 0 ) ) );
+    mMaxLineEdit->setText( QLocale().toString( range.at( 1 ) ) );
   }
 
   setLayout( vlayout );
@@ -1336,7 +1341,12 @@ QgsProcessingParameterDefinition *QgsProcessingRangeParameterDefinitionWidget::c
   }
   else
   {
-    defaultValue = mMinLineEdit->text();
+    bool ok;
+    defaultValue = QString::number( QgsDoubleValidator::toDouble( mMinLineEdit->text(), &ok ) );
+    if ( ! ok )
+    {
+      defaultValue = QStringLiteral( "None" );
+    }
   }
 
   if ( mMaxLineEdit->text().isEmpty() )
@@ -1345,7 +1355,9 @@ QgsProcessingParameterDefinition *QgsProcessingRangeParameterDefinitionWidget::c
   }
   else
   {
-    defaultValue += QStringLiteral( "," ) + mMaxLineEdit->text();
+    bool ok;
+    const double val { QgsDoubleValidator::toDouble( mMaxLineEdit->text(), &ok ) };
+    defaultValue += QStringLiteral( ",%1" ).arg( ok ? QString::number( val ) : QLatin1String( "None" ) );
   }
 
   QgsProcessingParameterNumber::Type dataType = static_cast< QgsProcessingParameterNumber::Type >( mTypeComboBox->currentData().toInt() );
@@ -3996,7 +4008,13 @@ QgsProcessingFieldParameterDefinitionWidget::QgsProcessingFieldParameterDefiniti
 QgsProcessingParameterDefinition *QgsProcessingFieldParameterDefinitionWidget::createParameter( const QString &name, const QString &description, QgsProcessingParameterDefinition::Flags flags ) const
 {
   QgsProcessingParameterField::DataType dataType = static_cast< QgsProcessingParameterField::DataType >( mDataTypeComboBox->currentData().toInt() );
-  auto param = std::make_unique< QgsProcessingParameterField >( name, description, mDefaultLineEdit->text(), mParentLayerComboBox->currentData().toString(), dataType, mAllowMultipleCheckBox->isChecked(), false, mDefaultToAllCheckBox->isChecked() );
+
+  QVariant defaultValue;
+  if ( !mDefaultLineEdit->text().trimmed().isEmpty() )
+  {
+    defaultValue = mDefaultLineEdit->text();
+  }
+  auto param = std::make_unique< QgsProcessingParameterField >( name, description, defaultValue, mParentLayerComboBox->currentData().toString(), dataType, mAllowMultipleCheckBox->isChecked(), false, mDefaultToAllCheckBox->isChecked() );
   param->setFlags( flags );
   return param.release();
 }
@@ -4203,7 +4221,7 @@ void QgsProcessingFieldWidgetWrapper::setParentLayerWrapperValue( const QgsAbstr
     {
       widgetContext().messageBar()->clearWidgets();
       widgetContext().messageBar()->pushMessage( QString(), QObject::tr( "Could not load selected layer/table. Dependent field could not be populated" ),
-          Qgis::Info );
+          Qgis::MessageLevel::Info );
     }
     return;
   }
@@ -6338,7 +6356,7 @@ void QgsProcessingBandWidgetWrapper::setParentLayerWrapperValue( const QgsAbstra
     {
       widgetContext().messageBar()->clearWidgets();
       widgetContext().messageBar()->pushMessage( QString(), QObject::tr( "Could not load selected layer/table. Dependent bands could not be populated" ),
-          Qgis::Info );
+          Qgis::MessageLevel::Info );
     }
   }
 
@@ -6507,14 +6525,17 @@ void QgsProcessingMultipleLayerPanelWidget::setValue( const QVariant &value )
 void QgsProcessingMultipleLayerPanelWidget::setProject( QgsProject *project )
 {
   mProject = project;
-  connect( mProject, &QgsProject::layerRemoved, this, [&]( const QString & layerId )
+  if ( mProject )
   {
-    if ( mValue.removeAll( layerId ) )
+    connect( mProject, &QgsProject::layerRemoved, this, [&]( const QString & layerId )
     {
-      updateSummaryText();
-      emit changed();
-    }
-  } );
+      if ( mValue.removeAll( layerId ) )
+      {
+        updateSummaryText();
+        emit changed();
+      }
+    } );
+  }
 }
 
 void QgsProcessingMultipleLayerPanelWidget::setModel( QgsProcessingModelAlgorithm *model, const QString &modelChildAlgorithmID )
@@ -6721,7 +6742,8 @@ QWidget *QgsProcessingMultipleLayerWidgetWrapper::createWidget()
   mPanel = new QgsProcessingMultipleLayerPanelWidget( nullptr, layerParam );
   mPanel->setToolTip( parameterDefinition()->toolTip() );
   mPanel->setProject( widgetContext().project() );
-  mPanel->setModel( widgetContext().model(), widgetContext().modelChildAlgorithmId() );
+  if ( type() == QgsProcessingGui::Modeler )
+    mPanel->setModel( widgetContext().model(), widgetContext().modelChildAlgorithmId() );
   connect( mPanel, &QgsProcessingMultipleLayerPanelWidget::changed, this, [ = ]
   {
     emit widgetValueHasChanged( this );
@@ -6735,7 +6757,8 @@ void QgsProcessingMultipleLayerWidgetWrapper::setWidgetContext( const QgsProcess
   if ( mPanel )
   {
     mPanel->setProject( context.project() );
-    mPanel->setModel( widgetContext().model(), widgetContext().modelChildAlgorithmId() );
+    if ( type() == QgsProcessingGui::Modeler )
+      mPanel->setModel( widgetContext().model(), widgetContext().modelChildAlgorithmId() );
   }
 }
 

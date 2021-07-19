@@ -24,6 +24,8 @@
 #include "qgssymbollayerutils.h"
 #include "qgsexpressioncontextutils.h"
 #include "qgsstyle.h"
+#include "qgsmarkersymbol.h"
+#include "qgslinesymbol.h"
 
 QgsPropertyAssistantWidget::QgsPropertyAssistantWidget( QWidget *parent,
     const QgsPropertyDefinition &definition, const QgsProperty &initialState,
@@ -228,7 +230,7 @@ void QgsPropertyAssistantWidget::updatePreview()
     const QSize minSize( node->minimumIconSize() );
     node->setIconSize( minSize );
     widthMax = std::max( minSize.width(), widthMax );
-    QStandardItem *item = new QStandardItem( node->data( Qt::DecorationRole ).value<QPixmap>(), QString::number( breaks[i] ) );
+    QStandardItem *item = new QStandardItem( node->data( Qt::DecorationRole ).value<QPixmap>(), QLocale().toString( breaks[i] ) );
     item->setEditable( false );
     mPreviewList.appendRow( item );
     delete node;

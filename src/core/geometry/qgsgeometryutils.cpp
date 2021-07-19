@@ -252,8 +252,8 @@ bool QgsGeometryUtils::lineIntersection( const QgsPoint &p1, QgsVector v1, const
 
   intersection = QgsPoint( p1.x() + v1.x() * k, p1.y() + v1.y() * k );
 
-  // z support for intersection point
-  QgsGeometryUtils::setZValueFromPoints( QgsPointSequence() << p1 << p2, intersection );
+  // z and m support for intersection point
+  QgsGeometryUtils::transferFirstZOrMValueToPoint( QgsPointSequence() << p1 << p2, intersection );
 
   return true;
 }
@@ -852,8 +852,8 @@ bool QgsGeometryUtils::segmentMidPoint( const QgsPoint &p1, const QgsPoint &p2, 
 
   result = possibleMidPoints.at( minDistIndex );
 
-  // add z support if necessary
-  QgsGeometryUtils::setZValueFromPoints( QgsPointSequence() << p1 << p2, result );
+  // add z and m support if necessary
+  QgsGeometryUtils::transferFirstZOrMValueToPoint( QgsPointSequence() << p1 << p2, result );
 
   return true;
 }
@@ -1806,7 +1806,25 @@ void QgsGeometryUtils::weightedPointInTriangle( const double aX, const double aY
   pointY = rBy + rCy + aY;
 }
 
-bool QgsGeometryUtils::setZValueFromPoints( const QgsPointSequence &points, QgsPoint &point )
+bool QgsGeometryUtils::transferFirstMValueToPoint( const QgsPointSequence &points, QgsPoint &point )
+{
+  bool rc = false;
+
+  for ( const QgsPoint &pt : points )
+  {
+    if ( pt.isMeasure() )
+    {
+      point.convertTo( QgsWkbTypes::addM( point.wkbType() ) );
+      point.setM( pt.m() );
+      rc = true;
+      break;
+    }
+  }
+
+  return rc;
+}
+
+bool QgsGeometryUtils::transferFirstZValueToPoint( const QgsPointSequence &points, QgsPoint &point )
 {
   bool rc = false;
 
