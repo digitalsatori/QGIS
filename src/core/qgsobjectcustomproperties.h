@@ -18,9 +18,10 @@
 #ifndef QGSOBJECTCUSTOMPROPERTIES_H
 #define QGSOBJECTCUSTOMPROPERTIES_H
 
+#include "qgis_core.h"
+
 #include <QMap>
 #include <QVariant>
-#include "qgis_core.h"
 
 class QDomDocument;
 class QDomNode;
@@ -30,15 +31,10 @@ class QDomNode;
  * \brief Simple key-value store (keys = strings, values = variants) that supports loading/saving to/from XML
  * in \verbatim <customproperties> \endverbatim element.
  *
- * \since QGIS 2.4
  */
 class CORE_EXPORT QgsObjectCustomProperties
 {
   public:
-
-    /**
-     * Constructor for QgsObjectCustomProperties.
-     */
     QgsObjectCustomProperties() = default;
 
     /**
@@ -90,7 +86,6 @@ class CORE_EXPORT QgsObjectCustomProperties
 
   protected:
     QMap<QString, QVariant> mMap;
-
 };
 
 #endif // QGSOBJECTCUSTOMPROPERTIES_H

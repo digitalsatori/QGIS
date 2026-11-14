@@ -18,10 +18,11 @@
 #define QGSLAYOUTITEMPAGE_H
 
 #include "qgis_core.h"
+#include "qgis_sip.h"
 #include "qgslayoutitem.h"
 #include "qgslayoutitemregistry.h"
-#include "qgis_sip.h"
 
+#include <QPageLayout>
 
 ///@cond PRIVATE
 #ifndef SIP_RUN
@@ -32,9 +33,8 @@
  *
  * This is drawn separately to the underlying page item since the grid needs to be
  * drawn above all other layout items, while the paper item is drawn below all others.
- * \since QGIS 3.0
  */
-class CORE_EXPORT QgsLayoutItemPageGrid: public QGraphicsRectItem
+class CORE_EXPORT QgsLayoutItemPageGrid : public QGraphicsRectItem
 {
   public:
     QgsLayoutItemPageGrid( double x, double y, double width, double height, QgsLayout *layout );
@@ -51,15 +51,12 @@ class CORE_EXPORT QgsLayoutItemPageGrid: public QGraphicsRectItem
  * \ingroup core
  * \class QgsLayoutItemPage
  * \brief Item representing the paper in a layout.
- * \since QGIS 3.0
  */
 class CORE_EXPORT QgsLayoutItemPage : public QgsLayoutItem
 {
-
     Q_OBJECT
 
   public:
-
     //! Page orientation
     enum Orientation
     {
@@ -105,6 +102,12 @@ class CORE_EXPORT QgsLayoutItemPage : public QgsLayoutItem
      * \see pageSize()
      */
     bool setPageSize( const QString &size, Orientation orientation = Portrait );
+
+    /**
+     * Returns the page layout for the page, suitable to pass to QPrinter::setPageLayout
+     * \since QGIS 3.20
+     */
+    QPageLayout pageLayout() const;
 
     /**
      * Returns the size of the page.
@@ -156,7 +159,6 @@ class CORE_EXPORT QgsLayoutItemPage : public QgsLayoutItem
     void redraw() override;
 
   protected:
-
     void draw( QgsLayoutItemRenderContext &context ) override;
     void drawFrame( QgsRenderContext &context ) override;
     void drawBackground( QgsRenderContext &context ) override;
@@ -164,7 +166,6 @@ class CORE_EXPORT QgsLayoutItemPage : public QgsLayoutItem
     bool readPropertiesFromElement( const QDomElement &itemElement, const QDomDocument &document, const QgsReadWriteContext &context ) override;
 
   private:
-
     double mMaximumShadowWidth = -1;
 
     std::unique_ptr< QgsLayoutItemPageGrid > mGrid;

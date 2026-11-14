@@ -16,11 +16,11 @@
 #define QGSBROWSERGUIMODEL_H
 
 #include "qgis_gui.h"
-#include "qgsdataitem.h"
 #include "qgsbrowsermodel.h"
 
 class QgsDataItemGuiContext;
 class QgsMessageBar;
+class QgsMapCanvas;
 
 /**
  * \ingroup gui
@@ -39,7 +39,6 @@ class GUI_EXPORT QgsBrowserGuiModel : public QgsBrowserModel
     Q_OBJECT
 
   public:
-
     /**
      * Constructor for QgsBrowserGuiModel, with the specified \a parent object.
      *
@@ -50,15 +49,21 @@ class GUI_EXPORT QgsBrowserGuiModel : public QgsBrowserModel
     explicit QgsBrowserGuiModel( QObject *parent = nullptr );
 
     Qt::ItemFlags flags( const QModelIndex &index ) const override;
-    bool dropMimeData( const QMimeData *data, Qt::DropAction action,
-                       int row, int column, const QModelIndex &parent ) override;
+    bool dropMimeData( const QMimeData *data, Qt::DropAction action, int row, int column, const QModelIndex &parent ) override;
     bool setData( const QModelIndex &index, const QVariant &value, int role = Qt::EditRole ) override;
     //! Sets message bar that will be passed in QgsDataItemGuiContext to data items
     void setMessageBar( QgsMessageBar *bar );
 
+    /**
+     * Sets the associated map \a canvas that will be passed in QgsDataItemGuiContext to data items.
+     * \since QGIS 3.44
+     */
+    void setMapCanvas( QgsMapCanvas *canvas );
+
   private:
     QgsDataItemGuiContext createDataItemContext() const;
     QgsMessageBar *mMessageBar = nullptr;
+    QgsMapCanvas *mMapCanvas = nullptr;
 };
 
 #endif // QGSBROWSERGUIMODEL_H

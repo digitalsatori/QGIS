@@ -18,6 +18,7 @@
 #include "qgis_core.h"
 #include "qgis_sip.h"
 #include "qgsnewsfeedparser.h"
+
 #include <QAbstractItemModel>
 #include <QSortFilterProxyModel>
 
@@ -34,20 +35,27 @@ class CORE_EXPORT QgsNewsFeedModel : public QAbstractItemModel
 {
     Q_OBJECT
   public:
+    // *INDENT-OFF*
 
     /**
      * Custom model roles.
+     *
+     * \note Prior to QGIS 3.36 this was available as QgsNewsFeedModel::Role
+     * \since QGIS 3.36
      */
-    enum Role
+    enum class CustomRole SIP_MONKEYPATCH_SCOPEENUM_UNNEST( QgsNewsFeedModel, Role ) : int
     {
       Key = Qt::UserRole + 1, //!< Entry unique key
-      Title, //!< Entry title
-      Content, //!< Entry content
-      ImageUrl, //!< Optional entry image URL
-      Image, //!< Optional entry image
-      Link, //!< Optional entry URL link
-      Sticky, //!< Whether entry is sticky
+      Title,                  //!< Entry title
+      Content,                //!< Entry content
+      ImageUrl,               //!< Optional entry image URL
+      Image,                  //!< Optional entry image
+      Link,                   //!< Optional entry URL link
+      Sticky,                 //!< Whether entry is sticky
+      Published,              //!< Entry publication date
     };
+    Q_ENUM( CustomRole )
+    // *INDENT-ON*
 
     /**
      * Constructor for QgsNewsFeedModel, with the specified \a parent object.
@@ -63,15 +71,16 @@ class CORE_EXPORT QgsNewsFeedModel : public QAbstractItemModel
     QModelIndex parent( const QModelIndex &index ) const override;
     int rowCount( const QModelIndex &parent = QModelIndex() ) const override;
     int columnCount( const QModelIndex &parent = QModelIndex() ) const override;
+    QHash<int, QByteArray> roleNames() const override;
 
   private slots:
 
     void onEntryAdded( const QgsNewsFeedParser::Entry &entry );
     void onEntryRemoved( const QgsNewsFeedParser::Entry &entry );
+    void onEntryUpdated( const QgsNewsFeedParser::Entry &entry );
     void onImageFetched( int key, const QPixmap &pixmap );
 
   private:
-
     QgsNewsFeedParser *mParser = nullptr;
     QList< QgsNewsFeedParser::Entry > mEntries;
 };
@@ -88,7 +97,6 @@ class CORE_EXPORT QgsNewsFeedProxyModel : public QSortFilterProxyModel
 {
     Q_OBJECT
   public:
-
     /**
      * Constructor for QgsNewsFeedProxyModel, with the specified \a parent object.
      *
@@ -101,9 +109,7 @@ class CORE_EXPORT QgsNewsFeedProxyModel : public QSortFilterProxyModel
     bool lessThan( const QModelIndex &left, const QModelIndex &right ) const override;
 
   private:
-
     QgsNewsFeedModel *mModel = nullptr;
-
 };
 
 #endif // QGSNEWSFEEDMODEL_H

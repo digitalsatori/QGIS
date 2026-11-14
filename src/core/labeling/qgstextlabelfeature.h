@@ -15,26 +15,30 @@
 #ifndef QGSTEXTLABELFEATURE_H
 #define QGSTEXTLABELFEATURE_H
 
-#define SIP_NO_FILE
+
+#include <optional>
 
 #include "qgslabelfeature.h"
+#include "qgspallabeling.h"
 #include "qgstextdocument.h"
+#include "qgstextdocumentmetrics.h"
 #include "qgstextmetrics.h"
-#include <optional>
+
+#define SIP_NO_FILE
 
 class QgsTextCharacterFormat;
 
 /**
  * \ingroup core
- * \brief Class that adds extra information to QgsLabelFeature for text labels
+ * \brief Adds extra information to QgsLabelFeature for text labels.
  *
  * \note not part of public API
  */
-class QgsTextLabelFeature : public QgsLabelFeature
+class CORE_EXPORT QgsTextLabelFeature : public QgsLabelFeature
 {
   public:
     //! Construct text label feature
-    QgsTextLabelFeature( QgsFeatureId id, geos::unique_ptr geometry, QSizeF size );
+    QgsTextLabelFeature( QgsFeatureId id, geos::unique_ptr geometry, QSizeF size, int subPartId = 0 );
 
     //! Clean up
     ~QgsTextLabelFeature() override;
@@ -43,7 +47,6 @@ class QgsTextLabelFeature : public QgsLabelFeature
      * Returns the text component corresponding to a specified label part
      * \param partId Set to -1 for labels which are not broken into parts (e.g., non-curved labels), or the required
      * part index for labels which are broken into parts (curved labels)
-     * \since QGIS 2.10
      */
     QString text( int partId ) const;
 
@@ -72,19 +75,7 @@ class QgsTextLabelFeature : public QgsLabelFeature
     //! Sets font to be used for rendering
     void setDefinedFont( const QFont &f ) { mDefinedFont = f; }
     //! Font to be used for rendering
-    QFont definedFont() { return mDefinedFont; }
-
-    /**
-     * Metrics of the font for rendering.
-     *
-     * May be NULLPTR.
-     */
-    QFontMetricsF *labelFontMetrics() { return mFontMetrics.has_value() ? &mFontMetrics.value() : nullptr; }
-
-    /**
-     * Sets the font \a metrics.
-     */
-    void setFontMetrics( const QFontMetricsF &metrics );
+    QFont definedFont() const { return mDefinedFont; }
 
     /**
      * Returns additional info required for curved label placement.
@@ -94,7 +85,7 @@ class QgsTextLabelFeature : public QgsLabelFeature
      * \see setTextMetrics()
      * \since QGIS 3.20
      */
-    const QgsPrecalculatedTextMetrics *textMetrics() const { return mTextMetrics.has_value() ? &mTextMetrics.value() : nullptr; }
+    const QgsPrecalculatedTextMetrics *textMetrics() const { return mTextMetrics.has_value() ? &( *mTextMetrics ) : nullptr; }
 
     /**
      * Sets additional text \a metrics required for curved label placement.
@@ -109,22 +100,40 @@ class QgsTextLabelFeature : public QgsLabelFeature
      *
      * \since QGIS 3.20
      */
-    static QgsPrecalculatedTextMetrics calculateTextMetrics( const QgsMapToPixel *xform, const QFontMetricsF &fontMetrics, double letterSpacing,
-        double wordSpacing, const QString &text = QString(), QgsTextDocument *document = nullptr );
+    static QgsPrecalculatedTextMetrics calculateTextMetrics(
+      const QgsMapToPixel *xform,
+      const QgsRenderContext &context,
+      const QgsTextFormat &format,
+      const QFont &baseFont,
+      const QFontMetricsF &fontMetrics,
+      double letterSpacing,
+      double wordSpacing,
+      const QgsTextDocument &document,
+      const QgsTextDocumentMetrics &metrics
+    );
 
     /**
      * Returns the document for the label.
      * \see setDocument()
      * \since QGIS 3.14
      */
-    QgsTextDocument document() const;
+    const QgsTextDocument &document() const { return mDocument; }
 
     /**
-     * Sets the \a document for the label.
+     * Returns the document metrics for the label.
+     *
+     * \see document()
+     * \since QGIS 3.28
+     */
+    const QgsTextDocumentMetrics &documentMetrics() const { return mDocumentMetrics; }
+
+    /**
+     * Sets the \a document and document \a metrics for the label.
+     *
      * \see document()
      * \since QGIS 3.14
      */
-    void setDocument( const QgsTextDocument &document );
+    void setDocument( const QgsTextDocument &document, const QgsTextDocumentMetrics &metrics );
 
     /**
      * Sets the maximum \a angle (in radians) between inside curved label characters.
@@ -159,23 +168,19 @@ class QgsTextLabelFeature : public QgsLabelFeature
     double maximumCharacterAngleOutside() const { return mMaximumCharacterAngleOutside; }
 
   protected:
-
     //! Font for rendering
     QFont mDefinedFont;
-
-    //! Metrics of the font for rendering
-    std::optional< QFontMetricsF > mFontMetrics;
 
     //! Stores attribute values for data defined properties
     QMap< QgsPalLayerSettings::Property, QVariant > mDataDefinedValues;
 
     QgsTextDocument mDocument;
+    QgsTextDocumentMetrics mDocumentMetrics;
 
     double mMaximumCharacterAngleInside = 0;
     double mMaximumCharacterAngleOutside = 0;
 
     std::optional< QgsPrecalculatedTextMetrics > mTextMetrics;
-
 };
 
 #endif //QGSTEXTLABELFEATURE_H

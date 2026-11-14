@@ -19,6 +19,7 @@
 
 #include "qgis_core.h"
 #include "qgsscalebarrenderer.h"
+
 #include <QString>
 
 /**
@@ -26,15 +27,10 @@
  * \ingroup core
  * \brief Scalebar style that draws a single box with alternating
  * color for the segments.
- * \since QGIS 3.0
  */
-class CORE_EXPORT QgsSingleBoxScaleBarRenderer: public QgsScaleBarRenderer
+class CORE_EXPORT QgsSingleBoxScaleBarRenderer : public QgsScaleBarRenderer
 {
   public:
-
-    /**
-     * Constructor for QgsSingleBoxScaleBarRenderer.
-     */
     QgsSingleBoxScaleBarRenderer() = default;
 
     QString id() const override;
@@ -43,10 +39,9 @@ class CORE_EXPORT QgsSingleBoxScaleBarRenderer: public QgsScaleBarRenderer
     Flags flags() const override;
     QgsSingleBoxScaleBarRenderer *clone() const override SIP_FACTORY;
 
-    void draw( QgsRenderContext &context,
-               const QgsScaleBarSettings &settings,
-               const QgsScaleBarRenderer::ScaleBarContext &scaleContext ) const override;
+    void draw( QgsRenderContext &context, const QgsScaleBarSettings &settings, const QgsScaleBarRenderer::ScaleBarContext &scaleContext ) const override;
 
+    bool applyDefaultSettings( QgsScaleBarSettings &settings ) const override;
 };
 
 #endif // QGSSINGLEBOXSCALEBARRENDERER_H

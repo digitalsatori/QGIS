@@ -18,8 +18,8 @@
 #ifndef QGSLAYOUTMULTIFRAMEUNDOCOMMAND_H
 #define QGSLAYOUTMULTIFRAMEUNDOCOMMAND_H
 
-#include "qgslayoutundocommand.h"
 #include "qgis_core.h"
+#include "qgslayoutundocommand.h"
 
 class QgsLayout;
 class QgsLayoutMultiFrame;
@@ -37,12 +37,10 @@ SIP_NO_FILE
  * recreating a deleted multiframes when the undo stack rolls back past
  * the item deletion command.
  *
- * \since QGIS 3.0
 */
-class CORE_EXPORT QgsLayoutMultiFrameUndoCommand: public QgsAbstractLayoutUndoCommand
+class CORE_EXPORT QgsLayoutMultiFrameUndoCommand : public QgsAbstractLayoutUndoCommand
 {
   public:
-
     /**
      * Constructor for QgsLayoutMultiFrameUndoCommand.
      * \param item associated layout item
@@ -66,18 +64,15 @@ class CORE_EXPORT QgsLayoutMultiFrameUndoCommand: public QgsAbstractLayoutUndoCo
     QString multiFrameUuid() const;
 
   protected:
-
     void saveState( QDomDocument &stateDoc ) const override;
     void restoreState( QDomDocument &stateDoc ) override;
 
     virtual QgsLayoutMultiFrame *recreateItem( int itemType, QgsLayout *layout ) SIP_FACTORY;
 
   private:
-
     QString mFrameUuid;
     QgsLayout *mLayout = nullptr;
     int mItemType = 0;
-
 };
 
 /**
@@ -88,12 +83,10 @@ class CORE_EXPORT QgsLayoutMultiFrameUndoCommand: public QgsAbstractLayoutUndoCo
  * layout multiframe deletion. When applied (e.g. as a result of a 'redo' action),
  * the associated layout multiframe is deleted and removed from the layout.
  *
- * \since QGIS 3.0
 */
-class CORE_EXPORT QgsLayoutMultiFrameDeleteUndoCommand: public QgsLayoutMultiFrameUndoCommand
+class CORE_EXPORT QgsLayoutMultiFrameDeleteUndoCommand : public QgsLayoutMultiFrameUndoCommand
 {
   public:
-
     /**
      * Constructor for QgsLayoutMultiFrameDeleteUndoCommand.
      * \param item associated layout item
@@ -104,7 +97,6 @@ class CORE_EXPORT QgsLayoutMultiFrameDeleteUndoCommand: public QgsLayoutMultiFra
     QgsLayoutMultiFrameDeleteUndoCommand( QgsLayoutMultiFrame *frame, const QString &text, int id = 0, QUndoCommand *parent SIP_TRANSFERTHIS = nullptr );
     bool mergeWith( const QUndoCommand *command ) override;
     void redo() override;
-
 };
 
 
@@ -116,12 +108,10 @@ class CORE_EXPORT QgsLayoutMultiFrameDeleteUndoCommand: public QgsLayoutMultiFra
  * layout multiframe creation. When applied (e.g. as a result of a 'redo' action),
  * the associated layout multiframe is recreated and added to the layout.
  *
- * \since QGIS 3.0
 */
-class CORE_EXPORT QgsLayoutMultiFrameAddItemCommand: public QgsLayoutMultiFrameUndoCommand
+class CORE_EXPORT QgsLayoutMultiFrameAddItemCommand : public QgsLayoutMultiFrameUndoCommand
 {
   public:
-
     /**
      * Constructor for QgsLayoutMultiFrameAddItemCommand.
      * \param item associated layout item
@@ -133,7 +123,6 @@ class CORE_EXPORT QgsLayoutMultiFrameAddItemCommand: public QgsLayoutMultiFrameU
     bool containsChange() const override;
     bool mergeWith( const QUndoCommand *command ) override;
     void undo() override;
-
 };
 
 ///@endcond

@@ -16,32 +16,15 @@
 #ifndef QGSAPPMAPTOOLS_H
 #define QGSAPPMAPTOOLS_H
 
-#include <QList>
 #include <QHash>
+#include <QList>
 #include <QPointer>
-#include <QWidgetAction>
-
 
 class QgsMapTool;
 class QgsMapToolCapture;
 
 class QgsMapCanvas;
 class QgsAdvancedDigitizingDockWidget;
-class QgsSpinBox;
-
-class QgsStreamDigitizingSettingsAction: public QWidgetAction
-{
-    Q_OBJECT
-
-  public:
-
-    QgsStreamDigitizingSettingsAction( QWidget *parent = nullptr );
-    ~QgsStreamDigitizingSettingsAction() override;
-
-  private:
-    QgsSpinBox *mStreamToleranceSpinBox = nullptr;
-};
-
 
 class QgsAppMapTools
 {
@@ -56,28 +39,13 @@ class QgsAppMapTools
       MeasureDistance,
       MeasureArea,
       MeasureAngle,
+      MeasureBearing,
       AddFeature,
-      CircularStringCurvePoint,
-      CircularStringRadius,
-      Circle2Points,
-      Circle3Points,
-      Circle3Tangents,
-      Circle2TangentsPoint,
-      CircleCenterPoint,
-      EllipseCenter2Points,
-      EllipseCenterPoint,
-      EllipseExtent,
-      EllipseFoci,
-      RectangleCenterPoint,
-      RectangleExtent,
-      Rectangle3PointsDistance,
-      Rectangle3PointsProjected,
-      RegularPolygon2Points,
-      RegularPolygonCenterPoint,
-      RegularPolygonCenterCorner,
       MoveFeature,
       MoveFeatureCopy,
+      FeatureArrayCopy,
       OffsetCurve,
+      ChamferFillet,
       ReshapeFeatures,
       SplitFeatures,
       SplitParts,
@@ -98,11 +66,9 @@ class QgsAppMapTools
       VertexToolActiveLayer,
       RotatePointSymbolsTool,
       OffsetPointSymbolTool,
-      Annotation,
+      Annotation, // Unused
       FormAnnotation,
       HtmlAnnotation,
-      SvgAnnotation,
-      TextAnnotation,
       PinLabels,
       ShowHideLabels,
       MoveLabel,
@@ -112,6 +78,9 @@ class QgsAppMapTools
       ChangeLabelProperties,
       ReverseLine,
       TrimExtendFeature,
+      EditMeshFrame,
+      AnnotationEdit,
+      AnnotationSelect
     };
 
     QgsAppMapTools( QgsMapCanvas *canvas, QgsAdvancedDigitizingDockWidget *cadDock );
@@ -125,27 +94,23 @@ class QgsAppMapTools
     /**
      * Returns the specified \a tool.
      */
-    template <class ToolType> ToolType *mapTool( Tool tool )
+    template<class ToolType> ToolType *mapTool( Tool tool )
     {
       QgsMapTool *t = mapTool( tool );
-      return qobject_cast< ToolType * >( t );
+      return qobject_cast<ToolType *>( t );
     }
 
     /**
      * Returns a list of all QgsMapToolCapture derived tools.
      */
-    QList< QgsMapToolCapture * > captureTools() const;
-
-    /**
-     * Returns the stream digitizing settings action;
-     */
-    QWidgetAction *streamDigitizingSettingsAction();
+    QList<QgsMapToolCapture *> captureTools() const;
 
   private:
+    QHash<Tool, QPointer<QgsMapTool>> mTools;
 
-    QHash< Tool, QPointer< QgsMapTool > > mTools;
-    QgsStreamDigitizingSettingsAction *mStreamDigitizingSettingsAction = nullptr;
-
+    // Disable copying as we have pointer members.
+    QgsAppMapTools( const QgsAppMapTools & ) = delete;
+    QgsAppMapTools &operator=( const QgsAppMapTools & ) = delete;
 };
 
 #endif // QGSAPPMAPTOOLS_H

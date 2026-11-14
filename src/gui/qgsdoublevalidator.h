@@ -21,17 +21,21 @@
 #define QGSDOUBLEVALIDATOR_H
 
 #include <limits>
-#include <QRegExpValidator>
-#include <QLocale>
+
 #include "qgis_gui.h"
 #include "qgis_sip.h"
+
+#include <QLocale>
+#include <QRegularExpressionValidator>
 
 class QRegularExpression;
 
 /**
  * \ingroup gui
  *
- * \brief QgsDoubleValidator is a QLineEdit Validator that combines QDoubleValidator
+ * \brief A custom validator which allows entry of doubles in a locale-tolerant way.
+ *
+ * QgsDoubleValidator is a QLineEdit Validator that combines QDoubleValidator
  * and QRegularExpressionValidator to allow users to enter doubles with both
  * local and C interpretation as a fallback.
  *
@@ -42,7 +46,6 @@ class GUI_EXPORT QgsDoubleValidator : public QRegularExpressionValidator
     Q_OBJECT
 
   public:
-
     /**
      * Constructor for QgsDoubleValidator.
      */
@@ -86,6 +89,14 @@ class GUI_EXPORT QgsDoubleValidator : public QRegularExpressionValidator
      */
     QgsDoubleValidator( int decimal, QObject *parent );
 
+    /**
+     * Sets the number of decimals accepted by the validator to \a maxDecimals.
+     * \warning setting decimals overrides any custom regular expression that was previously set
+     * \since QGIS 3.22
+     */
+    void setMaxDecimals( int maxDecimals );
+
+
     QValidator::State validate( QString &input, int & ) const override SIP_SKIP;
 
     /**
@@ -96,14 +107,14 @@ class GUI_EXPORT QgsDoubleValidator : public QRegularExpressionValidator
 
     /**
      * Converts \a input string to double value.
-     * It used locale interpretation first
+     * It uses locale interpretation first
      * and C locale interpretation as fallback
      */
     static double toDouble( const QString &input, bool *ok ) SIP_SKIP;
 
     /**
      * Converts \a input string to double value.
-     * It used locale interpretation first
+     * It uses locale interpretation first
      * and C locale interpretation as fallback
      */
     static double toDouble( const QString &input );
@@ -158,6 +169,11 @@ class GUI_EXPORT QgsDoubleValidator : public QRegularExpressionValidator
      * Top range limit
      */
     double mMaximum;
+
+    /**
+     * Creates the expression with given max \a decimals
+     */
+    static QRegularExpression createExpression( int decimals );
 };
 
 #endif // QGSDOUBLEVALIDATOR_H

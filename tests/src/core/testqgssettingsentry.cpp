@@ -12,170 +12,444 @@
  *   (at your option) any later version.                                   *
  *                                                                         *
  ***************************************************************************/
-#include <QObject>
-
-
-#include "qgssettings.h"
-#include "qgssettingsentry.h"
-#include "qgsunittypes.h"
 #include "qgsmaplayerproxymodel.h"
+#include "qgssettingsentry.h"
+#include "qgssettingsentryenumflag.h"
+#include "qgssettingsentryimpl.h"
 #include "qgstest.h"
 
+#include <QObject>
+#include <QSettings>
+#include <QString>
+#include <QTemporaryDir>
+#include <QThread>
+
+using namespace Qt::StringLiterals;
 
 /**
  * \ingroup UnitTests
- * This is a unit test for the operations on curve geometries
+ * This is a unit test for QgsSettingsEntry classes
+ * \note Most functions are covered in the python test
  */
 class TestQgsSettingsEntry : public QObject
 {
     Q_OBJECT
 
+  private:
+    const QString mSettingsSection = u"settingsEntryBool"_s;
+
   private slots:
     void settingsKey();
     void enumValue();
     void flagValue();
+    void testFormerValue();
+    void testChanged();
+    void testGlobalDefault();
+    void testGlobalDefaultOverriddenByUser();
+    void testGlobalOrigin();
+    void testGlobalExists();
+    void testLoadGlobalDefaults();
+    void testSetValueGlobalDefaultCleanup();
+    void testThreadSafety();
 };
 
 void TestQgsSettingsEntry::settingsKey()
 {
-  QgsSettings settings;
+  QSettings &settings = QgsSettingsEntryBase::userSettings();
 
   {
-    QString key( QStringLiteral( "/qgis/testing/settingsKey" ) );
+    const QString key( u"/settingsKey"_s );
 
     // Be sure that settings does not exist already
     settings.remove( key );
 
-    // Check that keys are handled same way for QgsSettings and QgsSettingsEntry
+    // Check that keys are handled same way for QSettings and QgsSettingsEntry
     settings.setValue( key, 42 );
 
-    QgsSettingsEntryInteger settingsEntryInteger( key, QgsSettings::NoSection, 0 );
+    const QgsSettingsEntryInteger settingsEntryInteger( key, 0 );
     QCOMPARE( settingsEntryInteger.value(), 42 );
   }
 
   {
-    QString key( QStringLiteral( "qgis/testing/settingsKey" ) );
+    const QString key( u"settingsKey"_s );
 
     // Be sure that settings does not exist already
     settings.remove( key );
 
-    // Check that keys are handled same way for QgsSettings and QgsSettingsEntry
+    // Check that keys are handled same way for QSettings and QgsSettingsEntry
     settings.setValue( key, 43 );
 
-    QgsSettingsEntryInteger settingsEntryInteger( key, QgsSettings::NoSection, 0 );
+    const QgsSettingsEntryInteger settingsEntryInteger( key, 0 );
     QCOMPARE( settingsEntryInteger.value(), 43 );
-  }
-
-  {
-    QString key( QStringLiteral( "/qgis/testing/settingsKey" ) );
-
-    // Be sure that settings does not exist already
-    settings.remove( key, QgsSettings::Core );
-
-    // Check that keys are handled same way for QgsSettings and QgsSettingsEntry
-    settings.setValue( key, 44, QgsSettings::Core );
-
-    QgsSettingsEntryInteger settingsEntryInteger( key, QgsSettings::Core, 0 );
-    QCOMPARE( settingsEntryInteger.value(), 44 );
-  }
-
-  {
-    QString key( QStringLiteral( "qgis/testing/settingsKey" ) );
-
-    // Be sure that settings does not exist already
-    settings.remove( key, QgsSettings::Core );
-
-    // Check that keys are handled same way for QgsSettings and QgsSettingsEntry
-    settings.setValue( key, 45, QgsSettings::Core );
-
-    QgsSettingsEntryInteger settingsEntryInteger( key, QgsSettings::Core, 0 );
-    QCOMPARE( settingsEntryInteger.value(), 45 );
   }
 }
 
 void TestQgsSettingsEntry::enumValue()
 {
-  QString settingsKey( "qgis/testing/my_enum_value_for_units" );
+  const QString settingsKey( u"my_enum_value_for_units"_s );
 
   // Make sure the setting is not existing
-  QgsSettings().remove( settingsKey, QgsSettings::NoSection );
+  QgsSettingsEntryBase::userSettings().remove( settingsKey );
 
-  QgsSettingsEntryEnum settingsEntryEnum( settingsKey, QgsSettings::NoSection, QgsUnitTypes::LayoutMeters, "Layout unit" );
+  const QgsSettingsEntryEnumFlag settingsEntryEnum( settingsKey, mSettingsSection, Qgis::LayoutUnit::Meters, u"Layout unit"_s );
 
   // Check default value
-  QCOMPARE( settingsEntryEnum.defaultValue(), QgsUnitTypes::LayoutMeters );
+  QCOMPARE( settingsEntryEnum.defaultValue(), Qgis::LayoutUnit::Meters );
 
   // Check set value
   {
-    bool success = settingsEntryEnum.setValue( QgsUnitTypes::LayoutFeet );
+    const bool success = settingsEntryEnum.setValue( Qgis::LayoutUnit::Feet );
     QCOMPARE( success, true );
-    QgsUnitTypes::LayoutUnit qgsSettingsValue = QgsSettings().enumValue( settingsKey, QgsUnitTypes::LayoutMeters, QgsSettings::NoSection );
-    QCOMPARE( qgsSettingsValue, QgsUnitTypes::LayoutFeet );
+    const Qgis::LayoutUnit value = settingsEntryEnum.value();
+    QCOMPARE( value, Qgis::LayoutUnit::Feet );
   }
 
   // Check get value
-  QgsSettings().setEnumValue( settingsKey, QgsUnitTypes::LayoutPicas, QgsSettings::NoSection );
-  QCOMPARE( settingsEntryEnum.value(), QgsUnitTypes::LayoutPicas );
+  QgsSettingsEntryBase::userSettings().setValue( u"%1/%2"_s.arg( mSettingsSection, settingsKey ), u"Picas"_s );
+  QCOMPARE( settingsEntryEnum.value(), Qgis::LayoutUnit::Picas );
 
   // Check settings type
-  QCOMPARE( settingsEntryEnum.settingsType(), QgsSettingsEntryBase::SettingsType::Enum );
+  QCOMPARE( settingsEntryEnum.settingsType(), Qgis::SettingsType::EnumFlag );
 
   // assign to inexisting value
   {
-    bool success = settingsEntryEnum.setValue( static_cast<QgsUnitTypes::LayoutUnit>( -1 ) );
+    const bool success = settingsEntryEnum.setValue( static_cast<Qgis::LayoutUnit>( -1 ) );
     QCOMPARE( success, false );
 
     // Current value should not have changed
-    QgsUnitTypes::LayoutUnit qgsSettingsValue = QgsSettings().enumValue( settingsKey, QgsUnitTypes::LayoutMeters, QgsSettings::NoSection );
-    QCOMPARE( qgsSettingsValue, QgsUnitTypes::LayoutPicas );
+    QCOMPARE( settingsEntryEnum.value(), Qgis::LayoutUnit::Picas );
   }
 
   // check that value is stored as string
-  QCOMPARE( settingsEntryEnum.valueAsVariant().toString(), QMetaEnum::fromType<QgsUnitTypes::LayoutUnit>().key( QgsUnitTypes::LayoutPicas ) );
+  QCOMPARE( settingsEntryEnum.valueAsVariant().toString(), u"Picas"_s );
 
   // auto conversion of old settings (int to str)
-  QSettings().setValue( settingsKey, static_cast<int>( QgsUnitTypes::LayoutCentimeters ) );
-  QCOMPARE( settingsEntryEnum.valueAsVariant().toInt(), QgsUnitTypes::LayoutCentimeters );
-  QCOMPARE( settingsEntryEnum.value(), QgsUnitTypes::LayoutCentimeters );
+  QSettings().setValue( u"%1/%2"_s.arg( mSettingsSection, settingsKey ), static_cast<int>( Qgis::LayoutUnit::Centimeters ) );
+  QCOMPARE( settingsEntryEnum.valueAsVariant().toInt(), static_cast<int>( Qgis::LayoutUnit::Centimeters ) );
+  QCOMPARE( settingsEntryEnum.value(), Qgis::LayoutUnit::Centimeters );
+
+  // save as int instead of string
+  const QgsSettingsEntryEnumFlag settingsEntryEnumAsInteger( settingsKey, mSettingsSection, Qgis::LayoutUnit::Meters, u"Layout unit"_s, Qgis::SettingsOption::SaveEnumFlagAsInt );
+  settingsEntryEnumAsInteger.remove();
+  {
+    int qgsSettingsValue = static_cast<int>( settingsEntryEnumAsInteger.value() );
+    QCOMPARE( qgsSettingsValue, static_cast<int>( Qgis::LayoutUnit::Meters ) );
+    const bool success = settingsEntryEnumAsInteger.setValue( Qgis::LayoutUnit::Feet );
+    QCOMPARE( success, true );
+    qgsSettingsValue = QgsSettingsEntryBase::userSettings().value( u"%1/%2"_s.arg( mSettingsSection, settingsKey ), static_cast<int>( Qgis::LayoutUnit::Meters ) ).toInt();
+    QCOMPARE( qgsSettingsValue, static_cast<int>( Qgis::LayoutUnit::Feet ) );
+  }
 }
 
 void TestQgsSettingsEntry::flagValue()
 {
-  QString settingsKey( "qgis/testing/my_flag_value_for_units" );
-  QgsMapLayerProxyModel::Filters pointAndLine = QgsMapLayerProxyModel::Filters( QgsMapLayerProxyModel::PointLayer | QgsMapLayerProxyModel::LineLayer );
-  QgsMapLayerProxyModel::Filters pointAndPolygon = QgsMapLayerProxyModel::Filters( QgsMapLayerProxyModel::PointLayer | QgsMapLayerProxyModel::PolygonLayer );
-  QgsMapLayerProxyModel::Filters hasGeometry = QgsMapLayerProxyModel::Filters( QgsMapLayerProxyModel::HasGeometry );
+  const QString settingsKey( u"my_flag_value_for_units"_s );
+  const Qgis::LayerFilters pointAndLine = Qgis::LayerFilters( Qgis::LayerFilter::PointLayer | Qgis::LayerFilter::LineLayer );
+  const Qgis::LayerFilters pointAndPolygon = Qgis::LayerFilters( Qgis::LayerFilter::PointLayer | Qgis::LayerFilter::PolygonLayer );
+  const Qgis::LayerFilters hasGeometry = Qgis::LayerFilters( Qgis::LayerFilter::HasGeometry );
 
   // Make sure the setting is not existing
-  QgsSettings().remove( settingsKey, QgsSettings::NoSection );
+  QgsSettingsEntryBase::userSettings().remove( u"%1/%2"_s.arg( mSettingsSection, settingsKey ) );
 
-  QgsSettingsEntryFlag settingsEntryFlag( settingsKey, QgsSettings::NoSection, pointAndLine, "Filters" );
+  const QgsSettingsEntryEnumFlag settingsEntryFlag( settingsKey, mSettingsSection, Qgis::LayerFilters(), u"Filters"_s );
 
   // Check default value
-  QCOMPARE( settingsEntryFlag.defaultValue(), pointAndLine );
+  QCOMPARE( settingsEntryFlag.defaultValue(), Qgis::LayerFilters() );
+
+  // check no value
+  QCOMPARE( settingsEntryFlag.exists(), false );
+  QCOMPARE( settingsEntryFlag.value(), Qgis::LayerFilters() );
+
+  QCOMPARE( settingsEntryFlag.valueWithDefaultOverride( pointAndLine ), pointAndLine );
 
   // Check set value
   {
-    bool success = settingsEntryFlag.setValue( hasGeometry );
+    const bool success = settingsEntryFlag.setValue( hasGeometry );
     QCOMPARE( success, true );
-    QgsMapLayerProxyModel::Filters qgsSettingsValue = QgsSettings().flagValue( settingsKey, pointAndLine, QgsSettings::NoSection );
-    QCOMPARE( qgsSettingsValue, hasGeometry );
+    QCOMPARE( settingsEntryFlag.value(), hasGeometry );
   }
 
   // Check get value
-  QgsSettings().setFlagValue( settingsKey, pointAndLine, QgsSettings::NoSection );
+  QgsSettingsEntryBase::userSettings().setValue( u"%1/%2"_s.arg( mSettingsSection, settingsKey ), u"PointLayer|LineLayer"_s );
   QCOMPARE( settingsEntryFlag.value(), pointAndLine );
 
   // Check settings type
-  QCOMPARE( settingsEntryFlag.settingsType(), QgsSettingsEntryBase::SettingsType::Flag );
+  QCOMPARE( settingsEntryFlag.settingsType(), Qgis::SettingsType::EnumFlag );
 
   // check that value is stored as string
-  QCOMPARE( settingsEntryFlag.valueAsVariant().toByteArray(), QMetaEnum::fromType<QgsMapLayerProxyModel::Filters>().valueToKeys( pointAndLine ) );
+  QCOMPARE( settingsEntryFlag.valueAsVariant().toString(), u"PointLayer|LineLayer"_s );
 
   // auto conversion of old settings (int to str)
-  QSettings().setValue( settingsKey, static_cast<int>( pointAndPolygon ) );
+  QSettings().setValue( u"%1/%2"_s.arg( mSettingsSection, settingsKey ), static_cast<int>( pointAndPolygon ) );
   QCOMPARE( settingsEntryFlag.valueAsVariant().toInt(), pointAndPolygon );
   QCOMPARE( settingsEntryFlag.value(), pointAndPolygon );
+}
+
+void TestQgsSettingsEntry::testFormerValue()
+{
+  const QString settingsKey( u"settingsEntryInteger/integer-former-value"_s );
+  const QString settingsKeyFormer = settingsKey + ( u"_formervalue"_s );
+
+  QgsSettingsEntryBase::userSettings().remove( u"%1/%2"_s.arg( mSettingsSection, settingsKey ) );
+  QgsSettingsEntryBase::userSettings().remove( u"%1/%2"_s.arg( mSettingsSection, settingsKeyFormer ) );
+  int defaultValue = 111;
+  int defaultFormerValue = 222;
+
+  QgsSettingsEntryInteger settingsEntryInteger = QgsSettingsEntryInteger( settingsKey, mSettingsSection, defaultValue, QString(), Qgis::SettingsOption::SaveFormerValue );
+
+  QCOMPARE( settingsEntryInteger.formerValue(), defaultValue );
+  QCOMPARE( QgsSettingsEntryBase::userSettings().value( u"%1/%2"_s.arg( mSettingsSection, settingsKey ), defaultValue ), defaultValue );
+  QCOMPARE( QgsSettingsEntryBase::userSettings().value( u"%1/%2"_s.arg( mSettingsSection, settingsKeyFormer ), defaultFormerValue ), defaultFormerValue );
+
+  settingsEntryInteger.setValue( 2 );
+  QCOMPARE( QgsSettingsEntryBase::userSettings().value( u"%1/%2"_s.arg( mSettingsSection, settingsKey ), defaultValue ), 2 );
+  QCOMPARE( QgsSettingsEntryBase::userSettings().value( u"%1/%2"_s.arg( mSettingsSection, settingsKeyFormer ), defaultFormerValue ), defaultFormerValue );
+  QCOMPARE( settingsEntryInteger.formerValue(), 2 );
+
+  settingsEntryInteger.setValue( 2 );
+  QCOMPARE( QgsSettingsEntryBase::userSettings().value( u"%1/%2"_s.arg( mSettingsSection, settingsKey ), defaultValue ), 2 );
+  QCOMPARE( QgsSettingsEntryBase::userSettings().value( u"%1/%2"_s.arg( mSettingsSection, settingsKeyFormer ), defaultFormerValue ), defaultFormerValue );
+  QCOMPARE( settingsEntryInteger.formerValue(), 2 );
+
+  settingsEntryInteger.setValue( 3 );
+  QCOMPARE( QgsSettingsEntryBase::userSettings().value( u"%1/%2"_s.arg( mSettingsSection, settingsKey ), defaultValue ), 3 );
+  QCOMPARE( QgsSettingsEntryBase::userSettings().value( u"%1/%2"_s.arg( mSettingsSection, settingsKeyFormer ), defaultFormerValue ).toLongLong(), 2 );
+  QCOMPARE( settingsEntryInteger.formerValue(), 2 );
+
+  settingsEntryInteger.setValue( 2 );
+  QCOMPARE( settingsEntryInteger.formerValue(), 3 );
+}
+
+void TestQgsSettingsEntry::testChanged()
+{
+  const QString settingsKey( u"settingsEntryInteger/integer-value"_s );
+  QgsSettingsEntryBase::userSettings().remove( u"%1/%2"_s.arg( mSettingsSection, settingsKey ) );
+  int defaultValue = 111;
+
+  QgsSettingsEntryBase::userSettings().setValue( u"testSetting"_s, 1 );
+
+  QgsSettingsEntryInteger settingsEntryInteger = QgsSettingsEntryInteger( settingsKey, mSettingsSection, defaultValue );
+  QVERIFY( !settingsEntryInteger.hasChanged() );
+  settingsEntryInteger.copyValueToKeyIfChanged( u"testSetting"_s );
+  QCOMPARE( QgsSettingsEntryBase::userSettings().value( u"testSetting"_s ).toInt(), 1 );
+
+  settingsEntryInteger.setValue( 11111 );
+  QVERIFY( settingsEntryInteger.hasChanged() );
+
+  settingsEntryInteger.copyValueToKeyIfChanged( u"testSetting"_s );
+  QCOMPARE( QgsSettingsEntryBase::userSettings().value( u"testSetting"_s ).toInt(), 11111 );
+}
+
+void TestQgsSettingsEntry::testGlobalDefault()
+{
+  // Create a temporary INI file with a known key
+  QTemporaryDir tempDir;
+  QVERIFY( tempDir.isValid() );
+  const QString iniPath = tempDir.path() + u"/global.ini"_s;
+  {
+    QSettings globalIni( iniPath, QSettings::IniFormat );
+    globalIni.setValue( u"globaltest/myint"_s, 42 );
+    globalIni.setValue( u"globaltest/mystring"_s, u"hello"_s );
+    globalIni.sync();
+  }
+
+  QVERIFY( QgsSettingsEntryBase::setGlobalSettingsPath( iniPath ) );
+
+  // Setting defined only in global INI — no user value set
+  const QgsSettingsEntryInteger intEntry( u"myint"_s, u"globaltest"_s, 0 );
+  QCOMPARE( intEntry.value(), 42 );
+
+  const QgsSettingsEntryString strEntry( u"mystring"_s, u"globaltest"_s, QString() );
+  QCOMPARE( strEntry.value(), u"hello"_s );
+
+  // Clean up
+  QgsSettingsEntryBase::setGlobalSettingsPath( QString() );
+}
+
+void TestQgsSettingsEntry::testGlobalDefaultOverriddenByUser()
+{
+  QTemporaryDir tempDir;
+  QVERIFY( tempDir.isValid() );
+  const QString iniPath = tempDir.path() + u"/global.ini"_s;
+  {
+    QSettings globalIni( iniPath, QSettings::IniFormat );
+    globalIni.setValue( u"globaltest/overridden"_s, 100 );
+    globalIni.sync();
+  }
+
+  QVERIFY( QgsSettingsEntryBase::setGlobalSettingsPath( iniPath ) );
+
+  const QgsSettingsEntryInteger entry( u"overridden"_s, u"globaltest"_s, 0 );
+
+  // User overrides the global value
+  entry.setValue( 999 );
+  QCOMPARE( entry.value(), 999 );
+
+  // Clean up
+  entry.remove();
+  // With user value removed, global default should return
+  QCOMPARE( entry.value(), 100 );
+
+  QgsSettingsEntryBase::setGlobalSettingsPath( QString() );
+}
+
+void TestQgsSettingsEntry::testGlobalOrigin()
+{
+  QTemporaryDir tempDir;
+  QVERIFY( tempDir.isValid() );
+  const QString iniPath = tempDir.path() + u"/global.ini"_s;
+  {
+    QSettings globalIni( iniPath, QSettings::IniFormat );
+    globalIni.setValue( u"globaltest/globalonly"_s, 1 );
+    globalIni.setValue( u"globaltest/both"_s, 10 );
+    globalIni.sync();
+  }
+
+  QVERIFY( QgsSettingsEntryBase::setGlobalSettingsPath( iniPath ) );
+
+  // Global-only key
+  const QgsSettingsEntryInteger globalOnly( u"globalonly"_s, u"globaltest"_s, 0 );
+  QCOMPARE( globalOnly.origin( QStringList() ), Qgis::SettingsOrigin::Global );
+
+  // Key in both: Global takes precedence for origin
+  const QgsSettingsEntryInteger both( u"both"_s, u"globaltest"_s, 0 );
+  both.setValue( 20 );
+  QCOMPARE( both.origin( QStringList() ), Qgis::SettingsOrigin::Global );
+
+  // User-only key (not in global)
+  const QgsSettingsEntryInteger userOnly( u"useronly"_s, u"globaltest"_s, 0 );
+  userOnly.setValue( 5 );
+  QCOMPARE( userOnly.origin( QStringList() ), Qgis::SettingsOrigin::Local );
+
+  // Non-existent key
+  const QgsSettingsEntryInteger absent( u"absent"_s, u"globaltest"_s, 0 );
+  QCOMPARE( absent.origin( QStringList() ), Qgis::SettingsOrigin::Any );
+
+  // Clean up
+  both.remove();
+  userOnly.remove();
+  QgsSettingsEntryBase::setGlobalSettingsPath( QString() );
+}
+
+void TestQgsSettingsEntry::testGlobalExists()
+{
+  QTemporaryDir tempDir;
+  QVERIFY( tempDir.isValid() );
+  const QString iniPath = tempDir.path() + u"/global.ini"_s;
+  {
+    QSettings globalIni( iniPath, QSettings::IniFormat );
+    globalIni.setValue( u"globaltest/existskey"_s, u"val"_s );
+    globalIni.sync();
+  }
+
+  QVERIFY( QgsSettingsEntryBase::setGlobalSettingsPath( iniPath ) );
+
+  const QgsSettingsEntryString entry( u"existskey"_s, u"globaltest"_s, QString() );
+  // exists() should return true even though no user value is set
+  QVERIFY( entry.exists() );
+
+  const QgsSettingsEntryString absent( u"nope"_s, u"globaltest"_s, QString() );
+  QVERIFY( !absent.exists() );
+
+  QgsSettingsEntryBase::setGlobalSettingsPath( QString() );
+}
+
+void TestQgsSettingsEntry::testLoadGlobalDefaults()
+{
+  // Empty path should not crash
+  QVERIFY( !QgsSettingsEntryBase::setGlobalSettingsPath( QString() ) );
+
+  // Non-existent file should not crash
+  QVERIFY( !QgsSettingsEntryBase::setGlobalSettingsPath( u"/nonexistent/path/file.ini"_s ) );
+
+  // Verify hash is empty after non-existent path
+  const QgsSettingsEntryInteger entry( u"testkey"_s, u"test"_s, 99 );
+  QCOMPARE( entry.value(), 99 );
+}
+
+void TestQgsSettingsEntry::testSetValueGlobalDefaultCleanup()
+{
+  // When setting a value equal to the global default, the user key
+  // should be removed so the global default takes effect naturally.
+  QTemporaryDir tempDir;
+  QVERIFY( tempDir.isValid() );
+  const QString iniPath = tempDir.path() + u"/global.ini"_s;
+  {
+    QSettings globalIni( iniPath, QSettings::IniFormat );
+    globalIni.setValue( u"globaltest/cleanup"_s, 50 );
+    globalIni.sync();
+  }
+
+  QVERIFY( QgsSettingsEntryBase::setGlobalSettingsPath( iniPath ) );
+
+  const QgsSettingsEntryInteger entry( u"cleanup"_s, u"globaltest"_s, 0 );
+
+  // Set a different value — should write to user QSettings
+  entry.setValue( 999 );
+  QVERIFY( QgsSettingsEntryBase::userSettings().contains( entry.key() ) );
+  QCOMPARE( entry.value(), 999 );
+
+  // Set value back to the global default — should remove user key
+  entry.setValue( 50 );
+  QVERIFY( !QgsSettingsEntryBase::userSettings().contains( entry.key() ) );
+  // Value should still be 50 (from global hash)
+  QCOMPARE( entry.value(), 50 );
+
+  // Set a value when no user key exists and value differs — should write
+  entry.setValue( 123 );
+  QVERIFY( QgsSettingsEntryBase::userSettings().contains( entry.key() ) );
+  QCOMPARE( entry.value(), 123 );
+
+  // Set the same value again — should still be there
+  entry.setValue( 123 );
+  QVERIFY( QgsSettingsEntryBase::userSettings().contains( entry.key() ) );
+  QCOMPARE( entry.value(), 123 );
+
+  // Clean up
+  entry.remove();
+  QgsSettingsEntryBase::setGlobalSettingsPath( QString() );
+}
+
+void TestQgsSettingsEntry::testThreadSafety()
+{
+  // Verify that global defaults populated on the main thread are readable
+  // from a worker thread, and that a value written in a worker thread
+  // is visible from the main thread afterwards.
+  QTemporaryDir tempDir;
+  QVERIFY( tempDir.isValid() );
+  const QString iniPath = tempDir.path() + u"/global.ini"_s;
+  {
+    QSettings globalIni( iniPath, QSettings::IniFormat );
+    globalIni.setValue( u"threadtest/globalval"_s, 77 );
+    globalIni.sync();
+  }
+
+  QVERIFY( QgsSettingsEntryBase::setGlobalSettingsPath( iniPath ) );
+
+  const QgsSettingsEntryInteger entry( u"globalval"_s, u"threadtest"_s, 0 );
+
+  // Main thread sees the global default
+  QCOMPARE( entry.value(), 77 );
+
+  // Worker thread reads global default and writes a user override
+  int workerReadValue = 0;
+  QThread *thread = QThread::create( [&] {
+    workerReadValue = static_cast<int>( entry.value() );
+    entry.setValue( 123 );
+  } );
+  thread->start();
+  thread->wait();
+  delete thread;
+
+  // Worker saw the global default
+  QCOMPARE( workerReadValue, 77 );
+
+  // Main thread sees the value written by the worker
+  QCOMPARE( entry.value(), 123 );
+
+  // Clean up
+  entry.remove();
+  QgsSettingsEntryBase::setGlobalSettingsPath( QString() );
 }
 
 

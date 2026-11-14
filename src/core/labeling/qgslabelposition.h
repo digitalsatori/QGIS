@@ -18,12 +18,14 @@
 
 #include "qgis_core.h"
 #include "qgis_sip.h"
-
+#include "qgsgeometry.h"
 #include "qgspointxy.h"
 #include "qgsrectangle.h"
-#include "qgsgeometry.h"
 
 #include <QFont>
+#include <QString>
+
+using namespace Qt::StringLiterals;
 
 /**
  * \ingroup core
@@ -33,7 +35,6 @@
 class CORE_EXPORT QgsLabelPosition
 {
   public:
-
     /**
      * Constructor for QgsLabelPosition.
      * \param id associated feature ID
@@ -52,8 +53,23 @@ class CORE_EXPORT QgsLabelPosition
      * \param labelGeometry polygon geometry of label boundary
      * \param isUnplaced set to TRUE if label was unplaced (e.g. due to collisions with other labels)
      */
-    QgsLabelPosition( QgsFeatureId id, double r, const QVector< QgsPointXY > &corners, const QgsRectangle &rect, double w, double h, const QString &layer, const QString &labeltext, const QFont &labelfont, bool upside_down, bool diagram = false, bool pinned = false, const QString &providerId = QString(),
-                      const QgsGeometry &labelGeometry = QgsGeometry(), bool isUnplaced = false )
+    QgsLabelPosition(
+      QgsFeatureId id,
+      double r,
+      const QVector< QgsPointXY > &corners,
+      const QgsRectangle &rect,
+      double w,
+      double h,
+      const QString &layer,
+      const QString &labeltext,
+      const QFont &labelfont,
+      bool upside_down,
+      bool diagram = false,
+      bool pinned = false,
+      const QString &providerId = QString(),
+      const QgsGeometry &labelGeometry = QgsGeometry(),
+      bool isUnplaced = false
+    )
       : featureId( id )
       , rotation( r )
       , cornerPoints( corners )
@@ -71,13 +87,24 @@ class CORE_EXPORT QgsLabelPosition
       , isUnplaced( isUnplaced )
     {}
 
-    //! Constructor for QgsLabelPosition
     QgsLabelPosition() = default;
 
-    /**
+#ifdef SIP_RUN
+    // clang-format off
+    SIP_PYOBJECT __repr__();
+    % MethodCode
+    const QString text = sipCpp->labelText;
+    QString str = u"<QgsLabelPosition: \"%1\"%2>"_s.arg( text, sipCpp->isUnplaced ? u" (unplaced)"_s : QString() );
+    sipRes = PyUnicode_FromString( str.toUtf8().constData() );
+    % End
+// clang-format on
+#endif
+
+        /**
      * ID of feature associated with this label.
      */
-    QgsFeatureId featureId = FID_NULL;
+        QgsFeatureId featureId
+      = FID_NULL;
 
     /**
      * Rotation of label, in degrees clockwise.
@@ -135,7 +162,6 @@ class CORE_EXPORT QgsLabelPosition
 
     /**
      * ID of the associated label provider.
-     * \since QGIS 2.14
      */
     QString providerID;
 
@@ -144,6 +170,27 @@ class CORE_EXPORT QgsLabelPosition
      * \since QGIS 3.10
      */
     bool isUnplaced = false;
+
+    /**
+     * If non zero, indicates that the label position is part of a group of label positions (i.e. a character in a curved label).
+     *
+     * All other linked positions will share the same groupedLabelId.
+     */
+    long long groupedLabelId = 0;
+
+    /**
+     * For grouped labels, indicates the character index for this particular position.
+     *
+     * \since QGIS 4.4
+     */
+    long long groupedPositionIndex = 0;
+
+    /**
+     * Sub part identifier (for features which register multiple labels).
+     *
+     * \since QGIS 4.4
+     */
+    long long subPartId = 0;
 };
 
 #endif // QGSLABELPOSITION_H

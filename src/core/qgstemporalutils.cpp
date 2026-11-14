@@ -14,25 +14,23 @@
  ***************************************************************************/
 
 #include "qgstemporalutils.h"
-#include "qgsproject.h"
-#include "qgsmaplayertemporalproperties.h"
-#include "qgsrasterlayer.h"
-#include "qgsmeshlayer.h"
-#include "qgsvectorlayer.h"
-#include "qgsvectorlayertemporalproperties.h"
-#include "qgsrasterlayertemporalproperties.h"
-#include "qgsmeshlayertemporalproperties.h"
-#include "qgstemporalnavigationobject.h"
-#include "qgsmapdecoration.h"
-#include "qgsmapsettings.h"
-#include "qgsmaprenderercustompainterjob.h"
+
 #include "qgsexpressioncontextutils.h"
+#include "qgsmapdecoration.h"
+#include "qgsmaplayertemporalproperties.h"
+#include "qgsmaprenderercustompainterjob.h"
+#include "qgsmapsettings.h"
+#include "qgsproject.h"
+#include "qgstemporalnavigationobject.h"
 
 #include <QRegularExpression>
+#include <QString>
+
+using namespace Qt::StringLiterals;
 
 QgsDateTimeRange QgsTemporalUtils::calculateTemporalRangeForProject( QgsProject *project )
 {
-  QMap<QString, QgsMapLayer *> mapLayers = project->mapLayers();
+  const QMap<QString, QgsMapLayer *> mapLayers = project->mapLayers();
   QDateTime minDate;
   QDateTime maxDate;
 
@@ -42,11 +40,11 @@ QgsDateTimeRange QgsTemporalUtils::calculateTemporalRangeForProject( QgsProject 
 
     if ( !currentLayer->temporalProperties() || !currentLayer->temporalProperties()->isActive() )
       continue;
-    QgsDateTimeRange layerRange = currentLayer->temporalProperties()->calculateTemporalExtent( currentLayer );
+    const QgsDateTimeRange layerRange = currentLayer->temporalProperties()->calculateTemporalExtent( currentLayer );
 
-    if ( layerRange.begin().isValid() && ( !minDate.isValid() ||  layerRange.begin() < minDate ) )
+    if ( layerRange.begin().isValid() && ( !minDate.isValid() || layerRange.begin() < minDate ) )
       minDate = layerRange.begin();
-    if ( layerRange.end().isValid() && ( !maxDate.isValid() ||  layerRange.end() > maxDate ) )
+    if ( layerRange.end().isValid() && ( !maxDate.isValid() || layerRange.end() > maxDate ) )
       maxDate = layerRange.end();
   }
 
@@ -55,7 +53,7 @@ QgsDateTimeRange QgsTemporalUtils::calculateTemporalRangeForProject( QgsProject 
 
 QList< QgsDateTimeRange > QgsTemporalUtils::usedTemporalRangesForProject( QgsProject *project )
 {
-  QMap<QString, QgsMapLayer *> mapLayers = project->mapLayers();
+  const QMap<QString, QgsMapLayer *> mapLayers = project->mapLayers();
 
   QList< QgsDateTimeRange > ranges;
   for ( auto it = mapLayers.constBegin(); it != mapLayers.constEnd(); ++it )
@@ -78,13 +76,13 @@ bool QgsTemporalUtils::exportAnimation( const QgsMapSettings &mapSettings, const
     error = QObject::tr( "Filename template is empty" );
     return false;
   }
-  int numberOfDigits = settings.fileNameTemplate.count( QLatin1Char( '#' ) );
+  const int numberOfDigits = settings.fileNameTemplate.count( '#'_L1 );
   if ( numberOfDigits < 0 )
   {
     error = QObject::tr( "Wrong filename template format (must contain #)" );
     return false;
   }
-  const QString token( numberOfDigits, QLatin1Char( '#' ) );
+  const QString token( numberOfDigits, '#'_L1 );
   if ( !settings.fileNameTemplate.contains( token ) )
   {
     error = QObject::tr( "Filename template must contain all # placeholders in one continuous group." );
@@ -99,8 +97,17 @@ bool QgsTemporalUtils::exportAnimation( const QgsMapSettings &mapSettings, const
   QgsTemporalNavigationObject navigator;
   navigator.setTemporalExtents( settings.animationRange );
   navigator.setFrameDuration( settings.frameDuration );
+  navigator.setNavigationMode( settings.animationMode );
+  navigator.setTotalMovieFrames( settings.totalMovieFrames );
+  if ( settings.frameDuration.originalUnit() == Qgis::TemporalUnit::IrregularStep )
+  {
+    navigator.setAvailableTemporalRanges( settings.availableTemporalRanges );
+  }
+  navigator.setTemporalRangeCumulative( settings.temporalRangeCumulative );
+
   QgsMapSettings ms = mapSettings;
   const QgsExpressionContext context = ms.expressionContext();
+  ms.setFrameRate( settings.frameRate );
 
   const long long totalFrames = navigator.totalFrameCount();
   long long currentFrame = 0;
@@ -116,12 +123,12 @@ bool QgsTemporalUtils::exportAnimation( const QgsMapSettings &mapSettings, const
       }
       feedback->setProgress( currentFrame / static_cast<double>( totalFrames ) * 100 );
     }
-    ++currentFrame;
 
     navigator.setCurrentFrameNumber( currentFrame );
 
     ms.setIsTemporal( true );
     ms.setTemporalRange( navigator.dateTimeRangeForFrameNumber( currentFrame ) );
+    ms.setCurrentFrame( currentFrame );
 
     QgsExpressionContext frameContext = context;
     frameContext.appendScope( navigator.createExpressionContextScope() );
@@ -129,11 +136,12 @@ bool QgsTemporalUtils::exportAnimation( const QgsMapSettings &mapSettings, const
     ms.setExpressionContext( frameContext );
 
     QString fileName( settings.fileNameTemplate );
-    const QString frameNoPaddedLeft( QStringLiteral( "%1" ).arg( currentFrame, numberOfDigits, 10, QChar( '0' ) ) ); // e.g. 0001
+    const QString frameNoPaddedLeft( u"%1"_s.arg( currentFrame, numberOfDigits, 10, QChar( '0' ) ) ); // e.g. 0001
     fileName.replace( token, frameNoPaddedLeft );
     const QString path = QDir( settings.outputDirectory ).filePath( fileName );
 
-    QImage img = QImage( ms.outputSize(), ms.outputImageFormat() );
+    QImage img = QImage( ms.outputSize() * ms.devicePixelRatio(), ms.outputImageFormat() );
+    img.setDevicePixelRatio( ms.devicePixelRatio() );
     img.setDotsPerMeterX( 1000 * ms.outputDpi() / 25.4 );
     img.setDotsPerMeterY( 1000 * ms.outputDpi() / 25.4 );
     img.fill( ms.backgroundColor().rgb() );
@@ -155,60 +163,57 @@ bool QgsTemporalUtils::exportAnimation( const QgsMapSettings &mapSettings, const
     p.end();
 
     img.save( path );
+
+    ++currentFrame;
   }
 
   return true;
 }
 
 
-QDateTime QgsTemporalUtils::calculateFrameTime( const QDateTime &start, const long long frame, const QgsInterval interval )
+QDateTime QgsTemporalUtils::calculateFrameTime( const QDateTime &start, const long long frame, const QgsInterval &interval )
 {
-
   double unused;
   const bool isFractional = !qgsDoubleNear( fabs( modf( interval.originalDuration(), &unused ) ), 0.0 );
 
-  if ( isFractional || interval.originalUnit() == QgsUnitTypes::TemporalUnit::TemporalUnknownUnit )
+  if ( isFractional || interval.originalUnit() == Qgis::TemporalUnit::Unknown )
   {
-    return start + interval;
+    const double duration = interval.seconds();
+    return start.addMSecs( frame * duration * 1000 );
   }
   else
   {
     switch ( interval.originalUnit() )
     {
-      case QgsUnitTypes::TemporalUnit::TemporalMilliseconds:
+      case Qgis::TemporalUnit::Milliseconds:
         return start.addMSecs( frame * interval.originalDuration() );
-        break;
-      case QgsUnitTypes::TemporalUnit::TemporalSeconds:
+      case Qgis::TemporalUnit::Seconds:
         return start.addSecs( frame * interval.originalDuration() );
-        break;
-      case QgsUnitTypes::TemporalUnit::TemporalMinutes:
+      case Qgis::TemporalUnit::Minutes:
         return start.addSecs( 60 * frame * interval.originalDuration() );
-        break;
-      case QgsUnitTypes::TemporalUnit::TemporalHours:
+      case Qgis::TemporalUnit::Hours:
         return start.addSecs( 3600 * frame * interval.originalDuration() );
-        break;
-      case QgsUnitTypes::TemporalUnit::TemporalDays:
+      case Qgis::TemporalUnit::Days:
         return start.addDays( frame * interval.originalDuration() );
-        break;
-      case QgsUnitTypes::TemporalUnit::TemporalWeeks:
+      case Qgis::TemporalUnit::Weeks:
         return start.addDays( 7 * frame * interval.originalDuration() );
-        break;
-      case QgsUnitTypes::TemporalUnit::TemporalMonths:
+      case Qgis::TemporalUnit::Months:
         return start.addMonths( frame * interval.originalDuration() );
-        break;
-      case QgsUnitTypes::TemporalUnit::TemporalYears:
+      case Qgis::TemporalUnit::Years:
         return start.addYears( frame * interval.originalDuration() );
-        break;
-      case QgsUnitTypes::TemporalUnit::TemporalDecades:
+      case Qgis::TemporalUnit::Decades:
         return start.addYears( 10 * frame * interval.originalDuration() );
-        break;
-      case QgsUnitTypes::TemporalUnit::TemporalCenturies:
+      case Qgis::TemporalUnit::Centuries:
         return start.addYears( 100 * frame * interval.originalDuration() );
-        break;
-      default:
-        return start;
+      case Qgis::TemporalUnit::Unknown:
+        // handled above
+        return QDateTime();
+      case Qgis::TemporalUnit::IrregularStep:
+        // not supported by this method
+        return QDateTime();
     }
   }
+  return QDateTime();
 }
 
 QList<QDateTime> QgsTemporalUtils::calculateDateTimesUsingDuration( const QDateTime &start, const QDateTime &end, const QString &duration, bool &ok, bool &maxValuesExceeded, int maxValues )
@@ -218,8 +223,7 @@ QList<QDateTime> QgsTemporalUtils::calculateDateTimesUsingDuration( const QDateT
   if ( !ok )
     return {};
 
-  if ( timeDuration.years == 0 && timeDuration.months == 0 && timeDuration.weeks == 0 && timeDuration.days == 0
-       && timeDuration.hours == 0 && timeDuration.minutes == 0 && timeDuration.seconds == 0 )
+  if ( timeDuration.years == 0 && timeDuration.months == 0 && timeDuration.weeks == 0 && timeDuration.days == 0 && timeDuration.hours == 0 && timeDuration.minutes == 0 && timeDuration.seconds == 0 )
   {
     ok = false;
     return {};
@@ -332,22 +336,22 @@ long long QgsTimeDuration::toSeconds() const
   long long secs = 0.0;
 
   if ( years )
-    secs += years * QgsInterval::YEARS;
+    secs += years * static_cast< long long >( QgsInterval::YEARS );
   if ( months )
-    secs += months * QgsInterval::MONTHS;
+    secs += months * static_cast< long long >( QgsInterval::MONTHS );
   if ( days )
-    secs += days * QgsInterval::DAY;
+    secs += days * static_cast< long long >( QgsInterval::DAY );
   if ( hours )
-    secs += hours * QgsInterval::HOUR;
+    secs += hours * static_cast< long long >( QgsInterval::HOUR );
   if ( minutes )
-    secs += minutes * QgsInterval::MINUTE;
+    secs += minutes * static_cast< long long >( QgsInterval::MINUTE );
   if ( seconds )
     secs += seconds;
 
   return secs;
 }
 
-QDateTime QgsTimeDuration::addToDateTime( const QDateTime &dateTime )
+QDateTime QgsTimeDuration::addToDateTime( const QDateTime &dateTime ) const
 {
   QDateTime resultDateTime = dateTime;
 
@@ -366,7 +370,7 @@ QDateTime QgsTimeDuration::addToDateTime( const QDateTime &dateTime )
 QgsTimeDuration QgsTimeDuration::fromString( const QString &string, bool &ok )
 {
   ok = false;
-  thread_local QRegularExpression sRx( QStringLiteral( R"(P(?:([\d]+)Y)?(?:([\d]+)M)?(?:([\d]+)W)?(?:([\d]+)D)?(?:T(?:([\d]+)H)?(?:([\d]+)M)?(?:([\d\.]+)S)?)?$)" ) );
+  thread_local const QRegularExpression sRx( QStringLiteral( R"(P(?:([\d]+)Y)?(?:([\d]+)M)?(?:([\d]+)W)?(?:([\d]+)D)?(?:T(?:([\d]+)H)?(?:([\d]+)M)?(?:([\d\.]+)S)?)?$)" ) );
 
   const QRegularExpressionMatch match = sRx.match( string );
   QgsTimeDuration duration;

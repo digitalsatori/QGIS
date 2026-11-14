@@ -14,54 +14,32 @@
  ***************************************************************************/
 
 #include "qgslayernotesmanager.h"
-#include "qgsmaplayer.h"
-#include "qgsrichtexteditor.h"
+
 #include "qgsgui.h"
+#include "qgshelp.h"
+#include "qgslayernotesutils.h"
+#include "qgsmaplayer.h"
+#include "qgsproject.h"
+#include "qgsrichtexteditor.h"
+
 #include <QDialogButtonBox>
 #include <QPushButton>
+#include <QString>
 
-QString QgsLayerNotesManager::layerNotes( QgsMapLayer *layer )
-{
-  if ( !layer )
-    return nullptr;
+#include "moc_qgslayernotesmanager.cpp"
 
-  return layer->customProperty( QStringLiteral( "userNotes" ) ).toString();
-}
-
-void QgsLayerNotesManager::setLayerNotes( QgsMapLayer *layer, const QString &notes )
-{
-  if ( !layer )
-    return;
-
-  if ( notes.isEmpty() )
-    layer->removeCustomProperty( QStringLiteral( "userNotes" ) );
-  else
-    layer->setCustomProperty( QStringLiteral( "userNotes" ), notes );
-}
-
-bool QgsLayerNotesManager::layerHasNotes( QgsMapLayer *layer )
-{
-  if ( !layer )
-    return false;
-
-  return !layer->customProperty( QStringLiteral( "userNotes" ) ).toString().isEmpty();
-}
-
-void QgsLayerNotesManager::removeNotes( QgsMapLayer *layer )
-{
-  if ( layer )
-    layer->removeCustomProperty( QStringLiteral( "userNotes" ) );
-}
+using namespace Qt::StringLiterals;
 
 void QgsLayerNotesManager::editLayerNotes( QgsMapLayer *layer, QWidget *parent )
 {
-  const QString notes = layerNotes( layer );
+  const QString notes = QgsLayerNotesUtils::layerNotes( layer );
   QgsLayerNotesDialog *editor = new QgsLayerNotesDialog( parent );
   editor->setNotes( notes );
   editor->setWindowTitle( QObject::tr( "Layer Notes — %1" ).arg( layer->name() ) );
   if ( editor->exec() )
   {
-    QgsLayerNotesManager::setLayerNotes( layer, editor->notes() );
+    QgsLayerNotesUtils::setLayerNotes( layer, editor->notes() );
+    QgsProject::instance()->setDirty( true );
   }
 }
 
@@ -75,9 +53,10 @@ QgsLayerNotesDialog::QgsLayerNotesDialog( QWidget *parent )
   mEditor = new QgsRichTextEditor();
   layout->addWidget( mEditor );
 
-  QDialogButtonBox *buttonBox = new QDialogButtonBox( QDialogButtonBox::Save | QDialogButtonBox::Cancel );
+  QDialogButtonBox *buttonBox = new QDialogButtonBox( QDialogButtonBox::Save | QDialogButtonBox::Help | QDialogButtonBox::Cancel );
   connect( buttonBox->button( QDialogButtonBox::Save ), &QPushButton::clicked, this, &QDialog::accept );
   connect( buttonBox, &QDialogButtonBox::rejected, this, &QDialog::reject );
+  connect( buttonBox, &QDialogButtonBox::helpRequested, this, [] { QgsHelp::openHelp( u"introduction/general_tools.html#layer-notes"_s ); } );
   layout->addWidget( buttonBox );
 
   layout->setContentsMargins( 3, 0, 3, 3 );
@@ -93,5 +72,5 @@ void QgsLayerNotesDialog::setNotes( const QString &notes )
 
 QString QgsLayerNotesDialog::notes() const
 {
-  return mEditor->toHtml();
+  return !mEditor->textEdit()->toPlainText().trimmed().isEmpty() ? mEditor->toHtml() : QString();
 }

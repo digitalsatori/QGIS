@@ -16,54 +16,185 @@
 #include "qgssettingsentry.h"
 
 #include "qgslogger.h"
+#include "qgssettings.h"
+#include "qgssettingstreenode.h"
+#include "qgsthreadingutils.h"
 
+#include <QCoreApplication>
+#include <QDir>
+#include <QFile>
 #include <QRegularExpression>
+#include <QSettings>
+#include <QString>
 
-QgsSettingsEntryBase::QgsSettingsEntryBase( const QString &key, QgsSettings::Section section, const QVariant &defaultValue, const QString &description )
-  : mKey( key )
-  , mDefaultValue( defaultValue )
-  , mSection( section )
-  , mDescription( description )
-  , mPluginName()
+using namespace Qt::StringLiterals;
+
+/*
+ * Set to true by setupUserSettings() once QSettings::setDefaultFormat()
+ * and setPath() have been called. Each thread's QSettings instance is
+ * (re-)created on first access after this flag becomes true, so it
+ * picks up the correct IniFormat and profile path.
+ */
+static bool sSettingsInitialized = false;
+
+static QSettings &sUserSettings()
 {
+  thread_local std::unique_ptr<QSettings> sSettings;
+  thread_local bool sCreatedBeforeInit = true;
+
+  if ( !sSettings || ( sCreatedBeforeInit && sSettingsInitialized ) )
+  {
+    sSettings = std::make_unique< QSettings >();
+    sCreatedBeforeInit = !sSettingsInitialized;
+  }
+  return *sSettings;
 }
 
-QgsSettingsEntryBase::QgsSettingsEntryBase( const QString &key, const QString &pluginName, const QVariant &defaultValue, const QString &description )
-  : mKey( key )
-  , mDefaultValue( defaultValue )
-  , mSection( QgsSettings::Plugins )
-  , mDescription( description )
-  , mPluginName( pluginName )
+void QgsSettingsEntryBase::setupUserSettings( const QString &profilePath )
 {
+  QGIS_CHECK_MAIN_THREAD_ACCESS
+
+  if ( sSettingsInitialized )
+    return;
+
+  QSettings::setDefaultFormat( QSettings::IniFormat );
+  QSettings::setPath( QSettings::IniFormat, QSettings::UserScope, profilePath );
+  sSettingsInitialized = true;
+}
+
+QSettings &QgsSettingsEntryBase::userSettings()
+{
+  return sUserSettings();
+}
+
+QHash<QString, QVariant> QgsSettingsEntryBase::sGlobalDefaults;
+
+bool QgsSettingsEntryBase::setGlobalSettingsPath( const QString &path )
+{
+  // if this is called before the application is created
+  if ( QCoreApplication::instance() )
+  {
+    QGIS_CHECK_MAIN_THREAD_ACCESS
+  }
+
+  static bool sGlobalDefaultsLoaded = false;
+  if ( sGlobalDefaultsLoaded )
+    QgsDebugMsgLevel( u"Global settings are being reloaded from %1"_s.arg( path ), 2 );
+  sGlobalDefaultsLoaded = true;
+
+  sGlobalDefaults.clear();
+  if ( path.isEmpty() || !QFile::exists( path ) )
+    return false;
+
+  const QSettings globalSettings( path, QSettings::IniFormat );
+  const QStringList keys = globalSettings.allKeys();
+  sGlobalDefaults.reserve( keys.size() );
+  for ( const QString &key : keys )
+  {
+    sGlobalDefaults.insert( key, globalSettings.value( key ) );
+  }
+
+  return true;
+}
+
+bool QgsSettingsEntryBase::hasGlobalDefault( const QString &key )
+{
+  return sGlobalDefaults.contains( sanitizeGlobalKey( key ) );
+}
+
+QVariant QgsSettingsEntryBase::globalDefault( const QString &key )
+{
+  return sGlobalDefaults.value( sanitizeGlobalKey( key ) );
+}
+
+QStringList QgsSettingsEntryBase::globalChildGroups( const QString &prefix )
+{
+  QString normalizedPrefix = sanitizeGlobalKey( prefix );
+  if ( !normalizedPrefix.endsWith( '/' ) )
+    normalizedPrefix.append( '/' );
+
+  const int prefixLen = normalizedPrefix.size();
+  QStringList result;
+
+  for ( QHash<QString, QVariant>::const_iterator it = sGlobalDefaults.constBegin(); it != sGlobalDefaults.constEnd(); ++it )
+  {
+    if ( it.key().startsWith( normalizedPrefix ) )
+    {
+      const int slashPos = it.key().indexOf( '/', prefixLen );
+      const QString group = ( slashPos < 0 ) ? it.key().mid( prefixLen ) : it.key().mid( prefixLen, slashPos - prefixLen );
+      if ( !group.isEmpty() && !result.contains( group ) )
+        result.append( group );
+    }
+  }
+  return result;
+}
+
+QString QgsSettingsEntryBase::sanitizeGlobalKey( const QString &key )
+{
+  if ( key.startsWith( '/' ) )
+    return key.mid( 1 );
+  return key;
+}
+
+QVariant QgsSettingsEntryBase::valueFromSettingsWithGlobalDefault( const QString &resolvedKey, const QVariant &defaultValue ) const
+{
+  if ( sUserSettings().contains( resolvedKey ) )
+    return sUserSettings().value( resolvedKey );
+
+  // sGlobalDefaults is populated once on the main thread before any worker
+  // threads start, so concurrent reads are safe (no concurrent modification).
+  const QHash<QString, QVariant>::const_iterator it = sGlobalDefaults.constFind( sanitizeGlobalKey( resolvedKey ) );
+  if ( it != sGlobalDefaults.constEnd() )
+    return it.value();
+
+  return defaultValue;
+}
+
+QgsSettingsEntryBase::QgsSettingsEntryBase( const QString &key, QgsSettingsTreeNode *parent, const QVariant &defaultValue, const QString &description, Qgis::SettingsOptions options )
+  : mParentTreeElement( parent )
+  , mName( key )
+  , mDefaultValue( defaultValue )
+  , mDescription( description )
+  , mOptions( options )
+{
+  mKey = QDir::cleanPath( u"%1/%2"_s.arg( parent ? parent->completeKey() : QString(), key ) );
+
+  if ( parent )
+  {
+    parent->registerChildSetting( this, key );
+  }
 }
 
 QgsSettingsEntryBase::~QgsSettingsEntryBase()
 {
+  if ( mParentTreeElement )
+    mParentTreeElement->unregisterChildSetting( this );
 }
+
+QString QgsSettingsEntryBase::typeId() const
+{
+  return QString::fromUtf8( sSettingsTypeMetaEnum.valueToKey( static_cast<int>( settingsType() ) ) );
+}
+
 
 QString QgsSettingsEntryBase::key( const QString &dynamicKeyPart ) const
 {
-  QStringList dynamicKeyPartList;
-  if ( !dynamicKeyPart.isNull() )
-    dynamicKeyPartList.append( dynamicKeyPart );
-
-  return key( dynamicKeyPartList );
+  return key( dynamicKeyPartToList( dynamicKeyPart ) );
 }
 
 QString QgsSettingsEntryBase::key( const QStringList &dynamicKeyPartList ) const
 {
-  QString completeKey = mKey;
-  if ( !mPluginName.isEmpty() )
-  {
-    if ( !completeKey.startsWith( "/" ) )
-      completeKey.prepend( "/" );
-    completeKey.prepend( mPluginName );
-  }
+  return completeKeyPrivate( mKey, dynamicKeyPartList );
+}
+
+QString QgsSettingsEntryBase::completeKeyPrivate( const QString &key, const QStringList &dynamicKeyPartList ) const
+{
+  QString completeKey = key;
 
   if ( dynamicKeyPartList.isEmpty() )
   {
     if ( hasDynamicKey() )
-      QgsLogger::warning( QStringLiteral( "Settings '%1' have a dynamic key but the dynamic key part was not provided" ).arg( completeKey ) );
+      QgsDebugError( u"Settings '%1' have a dynamic key but the dynamic key part was not provided"_s.arg( completeKey ) );
 
     return completeKey;
   }
@@ -71,85 +202,161 @@ QString QgsSettingsEntryBase::key( const QStringList &dynamicKeyPartList ) const
   {
     if ( !hasDynamicKey() )
     {
-      QgsLogger::warning( QStringLiteral( "Settings '%1' don't have a dynamic key, the provided dynamic key part will be ignored" ).arg( completeKey ) );
+      QgsDebugError( u"Settings '%1' don't have a dynamic key, the provided dynamic key part will be ignored"_s.arg( completeKey ) );
       return completeKey;
     }
 
     for ( int i = 0; i < dynamicKeyPartList.size(); i++ )
     {
-      completeKey.replace( QString( "%%1" ).arg( QString::number( i + 1 ) ), dynamicKeyPartList.at( i ) );
+      completeKey.replace( u"%"_s.append( QString::number( i + 1 ) ), dynamicKeyPartList.at( i ) );
     }
   }
   return completeKey;
 }
 
+bool QgsSettingsEntryBase::keyIsValid( const QString &key ) const
+{
+  if ( !hasDynamicKey() )
+  {
+    if ( !key.contains( definitionKey() ) )
+      return false;
+    else
+      return key == definitionKey();
+  }
+
+  const thread_local QRegularExpression digitRx( u"%\\d+"_s );
+  const QRegularExpression regularExpression( definitionKey().replace( digitRx, u".*"_s ) );
+  const QRegularExpressionMatch regularExpressionMatch = regularExpression.match( key );
+  return regularExpressionMatch.hasMatch();
+}
+
+QString QgsSettingsEntryBase::definitionKey() const
+{
+  return mKey;
+}
+
 bool QgsSettingsEntryBase::hasDynamicKey() const
 {
-  static const QRegularExpression regularExpression( "%\\d+" );
+  const thread_local QRegularExpression regularExpression( u"%\\d+"_s );
   return mKey.contains( regularExpression );
 }
 
 bool QgsSettingsEntryBase::exists( const QString &dynamicKeyPart ) const
 {
-  return QgsSettings().contains( key( dynamicKeyPart ), section() );
+  const QString resolvedKey = key( dynamicKeyPart );
+  return sUserSettings().contains( resolvedKey ) || sGlobalDefaults.contains( sanitizeGlobalKey( resolvedKey ) );
 }
 
 bool QgsSettingsEntryBase::exists( const QStringList &dynamicKeyPartList ) const
 {
-  return QgsSettings().contains( key( dynamicKeyPartList ), section() );
+  const QString resolvedKey = key( dynamicKeyPartList );
+  return sUserSettings().contains( resolvedKey ) || sGlobalDefaults.contains( sanitizeGlobalKey( resolvedKey ) );
+}
+
+Qgis::SettingsOrigin QgsSettingsEntryBase::origin( const QStringList &dynamicKeyPartList ) const
+{
+  const QString resolvedKey = key( dynamicKeyPartList );
+
+  if ( sGlobalDefaults.contains( sanitizeGlobalKey( resolvedKey ) ) )
+    return Qgis::SettingsOrigin::Global;
+
+  if ( sUserSettings().contains( resolvedKey ) )
+    return Qgis::SettingsOrigin::Local;
+
+  return Qgis::SettingsOrigin::Any;
 }
 
 void QgsSettingsEntryBase::remove( const QString &dynamicKeyPart ) const
 {
-  QgsSettings().remove( key( dynamicKeyPart ), section() );
+  sUserSettings().remove( key( dynamicKeyPart ) );
 }
 
 void QgsSettingsEntryBase::remove( const QStringList &dynamicKeyPartList ) const
 {
-  QgsSettings().remove( key( dynamicKeyPartList ), section() );
+  sUserSettings().remove( key( dynamicKeyPartList ) );
 }
 
-QgsSettings::Section QgsSettingsEntryBase::section() const
+int QgsSettingsEntryBase::section() const
 {
-  return mSection;
+  return QgsSettings::NoSection;
 }
 
 bool QgsSettingsEntryBase::setVariantValue( const QVariant &value, const QString &dynamicKeyPart ) const
 {
-  QStringList dynamicKeyPartList;
-  if ( !dynamicKeyPart.isNull() )
-    dynamicKeyPartList.append( dynamicKeyPart );
-
-  return setVariantValue( value, dynamicKeyPartList );
+  return setVariantValue( value, dynamicKeyPartToList( dynamicKeyPart ) );
 }
 
 bool QgsSettingsEntryBase::setVariantValue( const QVariant &value, const QStringList &dynamicKeyPartList ) const
 {
-  QgsSettings().setValue( key( dynamicKeyPartList ),
-                          value,
-                          section() );
+  mHasChanged = true;
+  const QString resolvedKey = key( dynamicKeyPartList );
+
+  if ( mOptions.testFlag( Qgis::SettingsOption::SaveFormerValue ) )
+  {
+    if ( exists( dynamicKeyPartList ) )
+    {
+      QVariant currentValue = valueAsVariant( dynamicKeyPartList );
+      if ( value != currentValue )
+      {
+        sUserSettings().setValue( formerValuekey( dynamicKeyPartList ), currentValue );
+      }
+    }
+  }
+
+  // If the new value matches a global default, remove the user override
+  const QString sanitizedKey = sanitizeGlobalKey( resolvedKey );
+  if ( sGlobalDefaults.contains( sanitizedKey ) && sGlobalDefaults.value( sanitizedKey ) == value )
+  {
+    sUserSettings().remove( resolvedKey );
+  }
+  else
+  {
+    sUserSettings().setValue( resolvedKey, value );
+  }
   return true;
 }
 
-QVariant QgsSettingsEntryBase::valueAsVariant( const QString &dynamicKeyPart, bool useDefaultValueOverride, const QVariant &defaultValueOverride ) const
+QStringList QgsSettingsEntryBase::dynamicKeyPartToList( const QString &dynamicKeyPart )
 {
   QStringList dynamicKeyPartList;
   if ( !dynamicKeyPart.isNull() )
     dynamicKeyPartList.append( dynamicKeyPart );
+  return dynamicKeyPartList;
+}
 
-  return valueAsVariant( dynamicKeyPartList, useDefaultValueOverride, defaultValueOverride );
+QVariant QgsSettingsEntryBase::valueAsVariant( const QString &dynamicKeyPart ) const
+{
+  return valueAsVariant( dynamicKeyPartToList( dynamicKeyPart ) );
+}
+
+QVariant QgsSettingsEntryBase::valueAsVariant( const QStringList &dynamicKeyPartList ) const
+{
+  return valueFromSettingsWithGlobalDefault( key( dynamicKeyPartList ), mDefaultValue );
+}
+
+QVariant QgsSettingsEntryBase::valueAsVariant( const QString &dynamicKeyPart, bool useDefaultValueOverride, const QVariant &defaultValueOverride ) const
+{
+  Q_NOWARN_DEPRECATED_PUSH
+  return valueAsVariant( dynamicKeyPartToList( dynamicKeyPart ), useDefaultValueOverride, defaultValueOverride );
+  Q_NOWARN_DEPRECATED_POP
 }
 
 QVariant QgsSettingsEntryBase::valueAsVariant( const QStringList &dynamicKeyPartList, bool useDefaultValueOverride, const QVariant &defaultValueOverride ) const
 {
   if ( useDefaultValueOverride )
-    return QgsSettings().value( key( dynamicKeyPartList ),
-                                defaultValueOverride,
-                                mSection );
+    return valueFromSettingsWithGlobalDefault( key( dynamicKeyPartList ), defaultValueOverride );
   else
-    return QgsSettings().value( key( dynamicKeyPartList ),
-                                mDefaultValue,
-                                mSection );
+    return valueFromSettingsWithGlobalDefault( key( dynamicKeyPartList ), mDefaultValue );
+}
+
+QVariant QgsSettingsEntryBase::valueAsVariantWithDefaultOverride( const QVariant &defaultValueOverride, const QString &dynamicKeyPart ) const
+{
+  return valueFromSettingsWithGlobalDefault( key( dynamicKeyPart ), defaultValueOverride );
+}
+
+QVariant QgsSettingsEntryBase::valueAsVariantWithDefaultOverride( const QVariant &defaultValueOverride, const QStringList &dynamicKeyPartList ) const
+{
+  return valueFromSettingsWithGlobalDefault( key( dynamicKeyPartList ), defaultValueOverride );
 }
 
 QVariant QgsSettingsEntryBase::defaultValueAsVariant() const
@@ -162,433 +369,56 @@ QString QgsSettingsEntryBase::description() const
   return mDescription;
 }
 
-
-QgsSettingsEntryVariant::QgsSettingsEntryVariant( const QString &key, QgsSettings::Section section, const QVariant &defaultValue, const QString &description )
-  : QgsSettingsEntryBase( key,
-                          section,
-                          defaultValue,
-                          description )
+QVariant QgsSettingsEntryBase::formerValueAsVariant( const QString &dynamicKeyPart ) const
 {
+  return formerValueAsVariant( dynamicKeyPartToList( dynamicKeyPart ) );
 }
 
-QgsSettingsEntryVariant::QgsSettingsEntryVariant( const QString &key, const QString &pluginName, const QVariant &defaultValue, const QString &description )
-  : QgsSettingsEntryBase( key,
-                          pluginName,
-                          defaultValue,
-                          description )
+QVariant QgsSettingsEntryBase::formerValueAsVariant( const QStringList &dynamicKeyPartList ) const
 {
+  Q_ASSERT( mOptions.testFlag( Qgis::SettingsOption::SaveFormerValue ) );
+  QVariant defaultValueOverride = valueAsVariant( dynamicKeyPartList );
+  return sUserSettings().value( formerValuekey( dynamicKeyPartList ), defaultValueOverride );
 }
 
-bool QgsSettingsEntryVariant::setValue( const QVariant &value, const QString &dynamicKeyPart ) const
+bool QgsSettingsEntryBase::copyValueFromKey( const QString &key, const QStringList &dynamicKeyPartList, bool removeSettingAtKey ) const
 {
-  return QgsSettingsEntryBase::setVariantValue( value, dynamicKeyPart );
-}
+  QSettings &settings = sUserSettings();
 
-bool QgsSettingsEntryVariant::setValue( const QVariant &value, const QStringList &dynamicKeyPartList ) const
-{
-  return QgsSettingsEntryBase::setVariantValue( value, dynamicKeyPartList );
-}
+  const QString oldCompleteKey = completeKeyPrivate( key, dynamicKeyPartList );
 
-QVariant QgsSettingsEntryVariant::value( const QString &dynamicKeyPart, bool useDefaultValueOverride, const QVariant &defaultValueOverride ) const
-{
-  return valueAsVariant( dynamicKeyPart, useDefaultValueOverride, defaultValueOverride );
-}
-
-QVariant QgsSettingsEntryVariant::value( const QStringList &dynamicKeyPartList, bool useDefaultValueOverride, const QVariant &defaultValueOverride ) const
-{
-  return valueAsVariant( dynamicKeyPartList, useDefaultValueOverride, defaultValueOverride );
-}
-
-QVariant QgsSettingsEntryVariant::defaultValue() const
-{
-  return defaultValueAsVariant();
-}
-
-QgsSettingsEntryBase::SettingsType QgsSettingsEntryVariant::settingsType() const
-{
-  return QgsSettingsEntryBase::SettingsType::Variant;
-}
-
-QgsSettingsEntryString::QgsSettingsEntryString( const QString &key, QgsSettings::Section section, const QString &defaultValue, const QString &description, int minLength, int maxLength )
-  : QgsSettingsEntryBase( key,
-                          section,
-                          defaultValue,
-                          description )
-  , mMinLength( minLength )
-  , mMaxLength( maxLength )
-{
-}
-
-QgsSettingsEntryString::QgsSettingsEntryString( const QString &key, const QString &pluginName, const QString &defaultValue, const QString &description )
-  : QgsSettingsEntryBase( key,
-                          pluginName,
-                          defaultValue,
-                          description )
-  , mMinLength( 0 )
-  , mMaxLength( -1 )
-{
-}
-
-bool QgsSettingsEntryString::setValue( const QString &value, const QString &dynamicKeyPart ) const
-{
-  QStringList dynamicKeyPartList;
-  if ( !dynamicKeyPart.isNull() )
-    dynamicKeyPartList.append( dynamicKeyPart );
-
-  return setValue( value, dynamicKeyPartList );
-}
-
-bool QgsSettingsEntryString::setValue( const QString &value, const QStringList &dynamicKeyPartList ) const
-{
-  if ( value.length() < mMinLength )
+  if ( settings.contains( oldCompleteKey ) )
   {
-    QgsDebugMsg( QObject::tr( "Can't set value for settings with key '%1'. String length '%2' is shorter than minimum length '%3'." )
-                 .arg( QgsSettingsEntryBase::key( dynamicKeyPartList ),
-                       value.length(),
-                       mMinLength ) );
-    return false;
+    if ( !exists( dynamicKeyPartList ) )
+    {
+      QVariant oldValue = settings.value( oldCompleteKey, mDefaultValue );
+      // do not copy if it is equal to the default value
+      if ( oldValue != defaultValueAsVariant() )
+        setVariantValue( oldValue, dynamicKeyPartList );
+    }
+    if ( removeSettingAtKey )
+      settings.remove( oldCompleteKey );
+    return true;
   }
 
-  if ( mMaxLength >= 0
-       && value.length() > mMaxLength )
+  return false;
+}
+
+void QgsSettingsEntryBase::copyValueToKey( const QString &key, const QStringList &dynamicKeyPartList ) const
+{
+  const QString completeKey = completeKeyPrivate( key, dynamicKeyPartList );
+  sUserSettings().setValue( completeKey, valueAsVariant( dynamicKeyPartList ) );
+}
+
+void QgsSettingsEntryBase::copyValueToKeyIfChanged( const QString &key, const QStringList &dynamicKeyPartList ) const
+{
+  if ( hasChanged() )
   {
-    QgsDebugMsg( QObject::tr( "Can't set value for settings with key '%1'. String length '%2' is longer than maximum length '%3'." )
-                 .arg( QgsSettingsEntryBase::key( dynamicKeyPartList ),
-                       value.length(),
-                       mMinLength ) );
-    return false;
+    copyValueToKey( key, dynamicKeyPartList );
   }
-
-  return QgsSettingsEntryBase::setVariantValue( value, dynamicKeyPartList );
 }
 
-QString QgsSettingsEntryString::value( const QString &dynamicKeyPart, bool useDefaultValueOverride, const QString &defaultValueOverride ) const
+QString QgsSettingsEntryBase::formerValuekey( const QStringList &dynamicKeyPartList ) const
 {
-  return valueAsVariant( dynamicKeyPart, useDefaultValueOverride, defaultValueOverride ).toString();
+  return key( dynamicKeyPartList ) + u"_formervalue"_s;
 }
-
-QString QgsSettingsEntryString::value( const QStringList &dynamicKeyPartList, bool useDefaultValueOverride, const QString &defaultValueOverride ) const
-{
-  return valueAsVariant( dynamicKeyPartList, useDefaultValueOverride, defaultValueOverride ).toString();
-}
-
-QString QgsSettingsEntryString::defaultValue() const
-{
-  return defaultValueAsVariant().toString();
-}
-
-QgsSettingsEntryBase::SettingsType QgsSettingsEntryString::settingsType() const
-{
-  return QgsSettingsEntryBase::SettingsType::String;
-}
-
-void QgsSettingsEntryString::setMinLength( int minLength )
-{
-  mMinLength = minLength;
-}
-
-int QgsSettingsEntryString::minLength()
-{
-  return mMinLength;
-}
-
-void QgsSettingsEntryString::setMaxLength( int maxLength )
-{
-  mMaxLength = maxLength;
-}
-
-int QgsSettingsEntryString::maxLength()
-{
-  return mMaxLength;
-}
-
-QgsSettingsEntryStringList::QgsSettingsEntryStringList( const QString &key, QgsSettings::Section section, const QStringList &defaultValue, const QString &description )
-  : QgsSettingsEntryBase( key,
-                          section,
-                          defaultValue,
-                          description )
-{
-}
-
-QgsSettingsEntryStringList::QgsSettingsEntryStringList( const QString &key, const QString &pluginName, const QStringList &defaultValue, const QString &description )
-  : QgsSettingsEntryBase( key,
-                          pluginName,
-                          defaultValue,
-                          description )
-{
-}
-
-bool QgsSettingsEntryStringList::setValue( const QStringList &value, const QString &dynamicKeyPart ) const
-{
-  return QgsSettingsEntryBase::setVariantValue( value, dynamicKeyPart );
-}
-
-bool QgsSettingsEntryStringList::setValue( const QStringList &value, const QStringList &dynamicKeyPartList ) const
-{
-  return QgsSettingsEntryBase::setVariantValue( value, dynamicKeyPartList );
-}
-
-QStringList QgsSettingsEntryStringList::value( const QString &dynamicKeyPart, bool useDefaultValueOverride, const QStringList &defaultValueOverride ) const
-{
-  return valueAsVariant( dynamicKeyPart, useDefaultValueOverride, defaultValueOverride ).toStringList();
-}
-
-QStringList QgsSettingsEntryStringList::value( const QStringList &dynamicKeyPartList, bool useDefaultValueOverride, const QStringList &defaultValueOverride ) const
-{
-  return valueAsVariant( dynamicKeyPartList, useDefaultValueOverride, defaultValueOverride ).toStringList();
-}
-
-QStringList QgsSettingsEntryStringList::defaultValue() const
-{
-  return defaultValueAsVariant().toStringList();
-}
-
-QgsSettingsEntryBase::SettingsType QgsSettingsEntryStringList::settingsType() const
-{
-  return QgsSettingsEntryBase::SettingsType::StringList;
-}
-
-QgsSettingsEntryBool::QgsSettingsEntryBool( const QString &key, QgsSettings::Section section, bool defaultValue, const QString &description )
-  : QgsSettingsEntryBase( key,
-                          section,
-                          defaultValue,
-                          description )
-{
-}
-
-QgsSettingsEntryBool::QgsSettingsEntryBool( const QString &key, const QString &pluginName, bool defaultValue, const QString &description )
-  : QgsSettingsEntryBase( key,
-                          pluginName,
-                          defaultValue,
-                          description )
-{
-}
-
-bool QgsSettingsEntryBool::setValue( bool value, const QString &dynamicKeyPart ) const
-{
-  return QgsSettingsEntryBase::setVariantValue( value, dynamicKeyPart );
-}
-
-bool QgsSettingsEntryBool::setValue( bool value, const QStringList &dynamicKeyPartList ) const
-{
-  return QgsSettingsEntryBase::setVariantValue( value, dynamicKeyPartList );
-}
-
-bool QgsSettingsEntryBool::value( const QString &dynamicKeyPart, bool useDefaultValueOverride, bool defaultValueOverride ) const
-{
-  return valueAsVariant( dynamicKeyPart, useDefaultValueOverride, defaultValueOverride ).toBool();
-}
-
-bool QgsSettingsEntryBool::value( const QStringList &dynamicKeyPartList, bool useDefaultValueOverride, bool defaultValueOverride ) const
-{
-  return valueAsVariant( dynamicKeyPartList, useDefaultValueOverride, defaultValueOverride ).toBool();
-}
-
-bool QgsSettingsEntryBool::defaultValue() const
-{
-  return defaultValueAsVariant().toBool();
-}
-
-QgsSettingsEntryBase::SettingsType QgsSettingsEntryBool::settingsType() const
-{
-  return QgsSettingsEntryBase::SettingsType::Bool;
-}
-
-QgsSettingsEntryInteger::QgsSettingsEntryInteger( const QString &key, QgsSettings::Section section, qlonglong defaultValue, const QString &description, qlonglong minValue, qlonglong maxValue )
-  : QgsSettingsEntryBase( key,
-                          section,
-                          defaultValue,
-                          description )
-  , mMinValue( minValue )
-  , mMaxValue( maxValue )
-{
-}
-
-QgsSettingsEntryInteger::QgsSettingsEntryInteger( const QString &key, const QString &pluginName, qlonglong defaultValue, const QString &description )
-  : QgsSettingsEntryBase( key,
-                          pluginName,
-                          defaultValue,
-                          description )
-  , mMinValue( std::numeric_limits<qlonglong>::min() )
-  , mMaxValue( std::numeric_limits<qlonglong>::max() )
-{
-}
-
-bool QgsSettingsEntryInteger::setValue( qlonglong value, const QString &dynamicKeyPart ) const
-{
-  QStringList dynamicKeyPartList;
-  if ( !dynamicKeyPart.isNull() )
-    dynamicKeyPartList.append( dynamicKeyPart );
-
-  return setValue( value, dynamicKeyPartList );
-}
-
-bool QgsSettingsEntryInteger::setValue( qlonglong value, const QStringList &dynamicKeyPartList ) const
-{
-  if ( value < mMinValue )
-  {
-    QgsDebugMsg( QObject::tr( "Can't set value for settings with key '%1'. Value '%2' is less than minimum value '%3'." )
-                 .arg( QgsSettingsEntryBase::key( dynamicKeyPartList ),
-                       QString::number( value ),
-                       QString::number( mMinValue ) ) );
-    return false;
-  }
-
-  if ( value > mMaxValue )
-  {
-    QgsDebugMsg( QObject::tr( "Can't set value for settings with key '%1'. Value '%2' is greather than maximum value '%3'." )
-                 .arg( QgsSettingsEntryBase::key( dynamicKeyPartList ),
-                       QString::number( value ),
-                       QString::number( mMinValue ) ) );
-    return false;
-  }
-
-  return QgsSettingsEntryBase::setVariantValue( value, dynamicKeyPartList );
-}
-
-qlonglong QgsSettingsEntryInteger::value( const QString &dynamicKeyPart, bool useDefaultValueOverride, qlonglong defaultValueOverride ) const
-{
-  return valueAsVariant( dynamicKeyPart, useDefaultValueOverride, defaultValueOverride ).toLongLong();
-}
-
-qlonglong QgsSettingsEntryInteger::value( const QStringList &dynamicKeyPartList, bool useDefaultValueOverride, qlonglong defaultValueOverride ) const
-{
-  return valueAsVariant( dynamicKeyPartList, useDefaultValueOverride, defaultValueOverride ).toLongLong();
-}
-
-qlonglong QgsSettingsEntryInteger::defaultValue() const
-{
-  return defaultValueAsVariant().toLongLong();
-}
-
-QgsSettingsEntryBase::SettingsType QgsSettingsEntryInteger::settingsType() const
-{
-  return QgsSettingsEntryBase::SettingsType::Integer;
-}
-
-void QgsSettingsEntryInteger::setMinValue( qlonglong minValue )
-{
-  mMinValue = minValue;
-}
-
-qlonglong QgsSettingsEntryInteger::minValue()
-{
-  return mMinValue;
-}
-
-void QgsSettingsEntryInteger::setMaxValue( qlonglong maxValue )
-{
-  mMaxValue = maxValue;
-}
-
-qlonglong QgsSettingsEntryInteger::maxValue()
-{
-  return mMaxValue;
-}
-
-QgsSettingsEntryDouble::QgsSettingsEntryDouble( const QString &key, QgsSettings::Section section, double defaultValue, const QString &description, double minValue, double maxValue, int displayDecimals )
-  : QgsSettingsEntryBase( key,
-                          section,
-                          defaultValue,
-                          description )
-  , mMinValue( minValue )
-  , mMaxValue( maxValue )
-  , mDisplayHintDecimals( displayDecimals )
-{
-}
-
-QgsSettingsEntryDouble::QgsSettingsEntryDouble( const QString &key, const QString &pluginName, double defaultValue, const QString &description )
-  : QgsSettingsEntryBase( key,
-                          pluginName,
-                          defaultValue,
-                          description )
-  , mMinValue( std::numeric_limits<double>::lowest() )
-  , mMaxValue( std::numeric_limits<double>::max() )
-  , mDisplayHintDecimals( 1 )
-{
-}
-
-bool QgsSettingsEntryDouble::setValue( double value, const QString &dynamicKeyPart ) const
-{
-  QStringList dynamicKeyPartList;
-  if ( !dynamicKeyPart.isNull() )
-    dynamicKeyPartList.append( dynamicKeyPart );
-
-  return setValue( value, dynamicKeyPartList );
-}
-
-bool QgsSettingsEntryDouble::setValue( double value, const QStringList &dynamicKeyPartList ) const
-{
-  if ( value < mMinValue )
-  {
-    QgsDebugMsg( QObject::tr( "Can't set value for settings with key '%1'. Value '%2' is less than minimum value '%3'." )
-                 .arg( QgsSettingsEntryBase::key( dynamicKeyPartList ),
-                       QString::number( value ),
-                       QString::number( mMinValue ) ) );
-    return false;
-  }
-
-  if ( value > mMaxValue )
-  {
-    QgsDebugMsg( QObject::tr( "Can't set value for settings with key '%1'. Value '%2' is greather than maximum value '%3'." )
-                 .arg( QgsSettingsEntryBase::key( dynamicKeyPartList ),
-                       QString::number( value ),
-                       QString::number( mMinValue ) ) );
-    return false;
-  }
-
-  return QgsSettingsEntryBase::setVariantValue( value, dynamicKeyPartList );
-}
-
-double QgsSettingsEntryDouble::value( const QString &dynamicKeyPart, bool useDefaultValueOverride, double defaultValueOverride ) const
-{
-  return valueAsVariant( dynamicKeyPart, useDefaultValueOverride, defaultValueOverride ).toDouble();
-}
-
-double QgsSettingsEntryDouble::value( const QStringList &dynamicKeyPartList, bool useDefaultValueOverride, double defaultValueOverride ) const
-{
-  return valueAsVariant( dynamicKeyPartList, useDefaultValueOverride, defaultValueOverride ).toDouble();
-}
-
-double QgsSettingsEntryDouble::defaultValue() const
-{
-  return defaultValueAsVariant().toDouble();
-}
-
-QgsSettingsEntryBase::SettingsType QgsSettingsEntryDouble::settingsType() const
-{
-  return QgsSettingsEntryBase::SettingsType::Double;
-}
-
-void QgsSettingsEntryDouble::setMinValue( double minValue )
-{
-  mMinValue = minValue;
-}
-
-double QgsSettingsEntryDouble::minValue() const
-{
-  return mMinValue;
-}
-
-void QgsSettingsEntryDouble::setMaxValue( double maxValue )
-{
-  mMaxValue = maxValue;
-}
-
-double QgsSettingsEntryDouble::maxValue() const
-{
-  return mMaxValue;
-}
-
-void QgsSettingsEntryDouble::setDisplayHintDecimals( int displayHintDecimals )
-{
-  mDisplayHintDecimals = displayHintDecimals;
-}
-
-int QgsSettingsEntryDouble::displayHintDecimals() const
-{
-  return mDisplayHintDecimals;
-}
-
-
-

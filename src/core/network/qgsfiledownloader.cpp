@@ -14,22 +14,34 @@
  ***************************************************************************/
 
 #include "qgsfiledownloader.h"
-#include "qgsnetworkaccessmanager.h"
+
 #include "qgsapplication.h"
 #include "qgsauthmanager.h"
+#include "qgslogger.h"
+#include "qgsnetworkaccessmanager.h"
+#include "qgssetrequestinitiator_p.h"
+#include "qgsvariantutils.h"
 
 #include <QNetworkAccessManager>
-#include <QNetworkRequest>
 #include <QNetworkReply>
+#include <QNetworkRequest>
+#include <QString>
+
+#include "moc_qgsfiledownloader.cpp"
+
+using namespace Qt::StringLiterals;
+
 #ifndef QT_NO_SSL
 #include <QSslError>
 #endif
 
-QgsFileDownloader::QgsFileDownloader( const QUrl &url, const QString &outputFileName, const QString &authcfg, bool delayStart )
+QgsFileDownloader::QgsFileDownloader( const QUrl &url, const QString &outputFileName, const QString &authcfg, bool delayStart, Qgis::HttpMethod httpMethod, const QByteArray &data )
   : mUrl( url )
-  , mDownloadCanceled( false )
+  , mHttpMethod( httpMethod )
+  , mData( data )
 {
-  mFile.setFileName( outputFileName );
+  if ( !outputFileName.isEmpty() )
+    mFile.setFileName( outputFileName );
   mAuthCfg = authcfg;
   if ( !delayStart )
     startDownload();
@@ -50,7 +62,8 @@ void QgsFileDownloader::startDownload()
   QgsNetworkAccessManager *nam = QgsNetworkAccessManager::instance();
 
   QNetworkRequest request( mUrl );
-  QgsSetRequestInitiatorClass( request, QStringLiteral( "QgsFileDownloader" ) );
+  request.setAttribute( QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::RedirectPolicy::NoLessSafeRedirectPolicy );
+  QgsSetRequestInitiatorClass( request, u"QgsFileDownloader"_s );
   if ( !mAuthCfg.isEmpty() )
   {
     QgsApplication::authManager()->updateNetworkRequest( request, mAuthCfg );
@@ -65,7 +78,27 @@ void QgsFileDownloader::startDownload()
     mReply->deleteLater();
   }
 
-  mReply = nam->get( request );
+  switch ( mHttpMethod )
+  {
+    case Qgis::HttpMethod::Get:
+    {
+      mReply = nam->get( request );
+      break;
+    }
+    case Qgis::HttpMethod::Post:
+    {
+      mReply = nam->post( request, mData );
+      break;
+    }
+
+    case Qgis::HttpMethod::Head:
+    case Qgis::HttpMethod::Put:
+    case Qgis::HttpMethod::Delete:
+      QgsDebugError( u"Unsupported HTTP method: %1"_s.arg( qgsEnumValueToKey( mHttpMethod ) ) );
+      // not supported
+      break;
+  }
+
   if ( !mAuthCfg.isEmpty() )
   {
     QgsApplication::authManager()->updateNetworkReply( mReply, mAuthCfg );
@@ -100,7 +133,7 @@ void QgsFileDownloader::onSslErrors( QNetworkReply *reply, const QList<QSslError
   {
     QStringList errorMessages;
     errorMessages.reserve( errors.size() + 1 );
-    errorMessages <<  QStringLiteral( "SSL Errors: " );
+    errorMessages << u"SSL Errors: "_s;
 
     for ( const QSslError &error : errors )
       errorMessages << error.errorString();
@@ -134,14 +167,14 @@ void QgsFileDownloader::onReadyRead()
     error( tr( "No output filename specified" ) );
     onFinished();
   }
-  else if ( ! mFile.isOpen() && ! mFile.open( QIODevice::WriteOnly | QIODevice::Truncate ) )
+  else if ( !mFile.isOpen() && !mFile.open( QIODevice::WriteOnly | QIODevice::Truncate ) )
   {
     error( tr( "Cannot open output file: %1" ).arg( mFile.fileName() ) );
     onFinished();
   }
   else
   {
-    QByteArray data = mReply->readAll();
+    const QByteArray data = mReply->readAll();
     mFile.write( data );
   }
 }
@@ -149,7 +182,7 @@ void QgsFileDownloader::onReadyRead()
 void QgsFileDownloader::onFinished()
 {
   // when canceled
-  if ( ! mErrors.isEmpty() || mDownloadCanceled )
+  if ( !mErrors.isEmpty() || mDownloadCanceled )
   {
     if ( mFile.isOpen() )
       mFile.close();
@@ -165,30 +198,10 @@ void QgsFileDownloader::onFinished()
       mFile.close();
     }
 
-    // get redirection url
-    QVariant redirectionTarget = mReply->attribute( QNetworkRequest::RedirectionTargetAttribute );
     if ( mReply->error() )
     {
       mFile.remove();
       error( tr( "Download failed: %1" ).arg( mReply->errorString() ) );
-    }
-    else if ( !redirectionTarget.isNull() )
-    {
-      QUrl newUrl = mUrl.resolved( redirectionTarget.toUrl() );
-      mUrl = newUrl;
-      mReply->deleteLater();
-      if ( !mFile.open( QIODevice::WriteOnly ) )
-      {
-        mFile.remove();
-        error( tr( "Cannot open output file: %1" ).arg( mFile.fileName() ) );
-      }
-      else
-      {
-        mFile.resize( 0 );
-        mFile.close();
-        startDownload();
-      }
-      return;
     }
     else
     {
@@ -208,4 +221,3 @@ void QgsFileDownloader::onDownloadProgress( qint64 bytesReceived, qint64 bytesTo
   }
   emit downloadProgress( bytesReceived, bytesTotal );
 }
-

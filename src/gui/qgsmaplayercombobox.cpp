@@ -14,18 +14,23 @@
 ***************************************************************************/
 
 #include "qgsmaplayercombobox.h"
+
 #include "qgsmaplayermodel.h"
 #include "qgsmimedatautils.h"
+#include "qgsproject.h"
+
 #include <QDragEnterEvent>
 #include <QPainter>
+
+#include "moc_qgsmaplayercombobox.cpp"
 
 QgsMapLayerComboBox::QgsMapLayerComboBox( QWidget *parent )
   : QComboBox( parent )
 {
-  mProxyModel = new QgsMapLayerProxyModel( this );
+  mProxyModel = new QgsMapLayerProxyModel( QgsProject::instance(), this ); // skip-keyword-check
   setModel( mProxyModel );
 
-  connect( this, static_cast < void ( QComboBox::* )( int ) > ( &QComboBox::activated ), this, &QgsMapLayerComboBox::indexChanged );
+  connect( this, static_cast<void ( QComboBox::* )( int )>( &QComboBox::activated ), this, &QgsMapLayerComboBox::indexChanged );
   connect( mProxyModel, &QAbstractItemModel::rowsInserted, this, &QgsMapLayerComboBox::rowsChanged );
   connect( mProxyModel, &QAbstractItemModel::rowsRemoved, this, &QgsMapLayerComboBox::rowsChanged );
 
@@ -38,6 +43,12 @@ void QgsMapLayerComboBox::setExcludedProviders( const QStringList &providers )
 {
   mProxyModel->setExcludedProviders( providers );
 }
+
+void QgsMapLayerComboBox::setProject( QgsProject *project )
+{
+  mProxyModel->setProject( project );
+}
+
 
 QStringList QgsMapLayerComboBox::excludedProviders() const
 {
@@ -74,6 +85,16 @@ QStringList QgsMapLayerComboBox::additionalItems() const
   return mProxyModel->sourceLayerModel()->additionalItems();
 }
 
+void QgsMapLayerComboBox::setAdditionalLayers( const QList<QgsMapLayer *> &layers )
+{
+  mProxyModel->sourceLayerModel()->setAdditionalLayers( layers );
+}
+
+QList<QgsMapLayer *> QgsMapLayerComboBox::additionalLayers() const
+{
+  return mProxyModel->sourceLayerModel()->additionalLayers();
+}
+
 void QgsMapLayerComboBox::setLayer( QgsMapLayer *layer )
 {
   if ( layer == currentLayer() && ( layer || !isEditable() || currentText().isEmpty() ) )
@@ -86,10 +107,10 @@ void QgsMapLayerComboBox::setLayer( QgsMapLayer *layer )
     return;
   }
 
-  QModelIndex idx = mProxyModel->sourceLayerModel()->indexFromLayer( layer );
+  const QModelIndex idx = mProxyModel->sourceLayerModel()->indexFromLayer( layer );
   if ( idx.isValid() )
   {
-    QModelIndex proxyIdx = mProxyModel->mapFromSource( idx );
+    const QModelIndex proxyIdx = mProxyModel->mapFromSource( idx );
     if ( proxyIdx.isValid() )
     {
       setCurrentIndex( proxyIdx.row() );
@@ -154,7 +175,7 @@ QgsMapLayer *QgsMapLayerComboBox::compatibleMapLayerFromMimeData( const QMimeDat
   for ( const QgsMimeDataUtils::Uri &u : uriList )
   {
     // is this uri from the current project?
-    if ( QgsMapLayer *layer = u.mapLayer() )
+    if ( QgsMapLayer *layer = u.mapLayer( QgsProject::instance() ) )
     {
       if ( mProxyModel->acceptsLayer( layer ) )
         return layer;
@@ -230,9 +251,9 @@ void QgsMapLayerComboBox::paintEvent( QPaintEvent *e )
   if ( mDragActive || mHighlight )
   {
     QPainter p( this );
-    int width = 2;  // width of highlight rectangle inside frame
+    const int width = 2; // width of highlight rectangle inside frame
     p.setPen( QPen( palette().highlight(), width ) );
-    QRect r = rect().adjusted( width, width, -width, -width );
+    const QRect r = rect().adjusted( width, width, -width, -width );
     p.drawRect( r );
   }
 }

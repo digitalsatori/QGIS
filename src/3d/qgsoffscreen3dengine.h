@@ -20,40 +20,37 @@
 
 #include <QSize>
 
+#define SIP_NO_FILE
+
 class QOffscreenSurface;
 
 namespace Qt3DCore
 {
   class QAspectEngine;
   class QNode;
-}
+} // namespace Qt3DCore
 
 namespace Qt3DRender
 {
   class QCameraSelector;
   class QClearBuffers;
   class QRenderAspect;
-  class QRenderCapture;
-  class QRenderCaptureReply;
   class QRenderTarget;
   class QRenderTargetSelector;
   class QRenderTargetOutput;
   class QRenderSurfaceSelector;
   class QTexture2D;
   class QViewport;
-}
+} // namespace Qt3DRender
 
 namespace Qt3DLogic
 {
   class QLogicAspect;
 }
 
-#include "qgsshadowrenderingframegraph.h"
-
-#define SIP_NO_FILE
 
 /**
- * \ingroup 3d
+ * \ingroup qgis_3d
  * \brief Off-screen 3D engine implementation. It is useful for recording rendered 3D scenes of arbitrary size.
  *
  * \note While the on-screen 3D engine also allows capturing of images, its limitation is that
@@ -80,21 +77,18 @@ class _3D_EXPORT QgsOffscreen3DEngine : public QgsAbstract3DEngine
     Qt3DRender::QCamera *camera() override;
     QSize size() const override;
     QSurface *surface() const override;
-  signals:
-    //! Emitted after a call to requestCaptureImage() to return the captured image.
-    void imageCaptured( const QImage &image );
-  private:
 
+  private:
     QSize mSize = QSize( 640, 480 );
     Qt3DRender::QCamera *mCamera = nullptr;
-    QOffscreenSurface *mOffscreenSurface = nullptr;
+    std::unique_ptr<QOffscreenSurface> mOffscreenSurface;
 
     // basic Qt3D stuff
-    Qt3DCore::QAspectEngine *mAspectEngine = nullptr;              // The aspect engine, which holds the scene and related aspects.
-    Qt3DRender::QRenderAspect *mRenderAspect = nullptr;            // The render aspect, which deals with rendering the scene.
-    Qt3DLogic::QLogicAspect *mLogicAspect = nullptr;               // The logic aspect, which runs jobs to do with synchronising frames.
-    Qt3DRender::QRenderSettings *mRenderSettings = nullptr;        // The render settings, which control the general rendering behavior.
-    Qt3DCore::QNode *mSceneRoot = nullptr;                         // The scene root, which becomes a child of the engine's root entity.
+    std::unique_ptr<Qt3DCore::QAspectEngine> mAspectEngine; // The aspect engine, which holds the scene and related aspects.
+    Qt3DRender::QRenderAspect *mRenderAspect = nullptr;     // The render aspect, which deals with rendering the scene.
+    Qt3DLogic::QLogicAspect *mLogicAspect = nullptr;        // The logic aspect, which runs jobs to do with synchronising frames.
+    Qt3DRender::QRenderSettings *mRenderSettings = nullptr; // The render settings, which control the general rendering behavior.
+    Qt3DCore::QNode *mSceneRoot = nullptr;                  // The scene root, which becomes a child of the engine's root entity.
     Qt3DCore::QEntity *mRoot = nullptr;
 };
 

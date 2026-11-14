@@ -16,8 +16,15 @@
 
 #include "qgsauthmethod.h"
 
-QgsAuthMethod::QgsAuthMethod()
-#if QT_VERSION < QT_VERSION_CHECK(5, 14, 0)
-  : mMutex( QMutex::RecursionMode::Recursive )
+#include "moc_qgsauthmethod.cpp"
+
+#ifdef HAVE_GUI
+QWidget *QgsAuthMethod::editWidget( QWidget *parent ) const
+{
+  Q_UNUSED( parent )
+  return nullptr;
+}
 #endif
+
+QgsAuthMethod::QgsAuthMethod()
 {}

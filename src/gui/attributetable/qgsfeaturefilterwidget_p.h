@@ -16,7 +16,6 @@
 #ifndef QGSFEATUREFILTERWIDGET_P_H
 #define QGSFEATUREFILTERWIDGET_P_H
 
-#define SIP_NO_FILE
 
 /// @cond PRIVATE
 
@@ -31,10 +30,12 @@
 
 #include "ui_qgsfeaturefilterwidget.h"
 
+#include "qgis_gui.h"
 #include "qgsattributeform.h"
 
-#include "qgis_gui.h"
 #include <QTimer>
+
+#define SIP_NO_FILE
 
 class QgsVectorLayer;
 class QgsAttributeEditorContext;
@@ -51,25 +52,23 @@ class GUI_EXPORT QgsFeatureFilterWidget : public QWidget, private Ui::QgsFeature
     Q_OBJECT
 
   public:
-
     //! Constructor for QgsFeatureFilterWidget
     explicit QgsFeatureFilterWidget( QWidget *parent SIP_TRANSFERTHIS = nullptr );
 
-    void init( QgsVectorLayer *layer, const QgsAttributeEditorContext &context, QgsDualView *mainView,
-               QgsMessageBar *messageBar, int messagebarTimeout );
+    void init( QgsVectorLayer *layer, const QgsAttributeEditorContext &context, QgsDualView *mainView, QgsMessageBar *messageBar, int messagebarTimeout );
 
     /**
      * Sets the filter expression to filter visible features
      * \param filterString filter query string. QgsExpression compatible.
      */
-    void setFilterExpression( const QString &filterString,
-                              QgsAttributeForm::FilterType type = QgsAttributeForm::ReplaceFilter,
-                              bool alwaysShowFilter = false );
+    void setFilterExpression( const QString &filterString, QgsAttributeForm::FilterType type = QgsAttributeForm::ReplaceFilter, bool alwaysShowFilter = false );
 
   public slots:
     void filterShowAll();
     void filterSelected();
+    void filterInvalid();
     void filterVisible();
+    void filterEdited();
 
 
   private slots:
@@ -83,7 +82,6 @@ class GUI_EXPORT QgsFeatureFilterWidget : public QWidget, private Ui::QgsFeature
     void storeExpressionButtonInit();
 
     void filterExpressionBuilder();
-    void filterEdited();
     void filterQueryChanged( const QString &query );
     void filterQueryAccepted();
 
@@ -113,12 +111,11 @@ class GUI_EXPORT QgsFeatureFilterWidget : public QWidget, private Ui::QgsFeature
      * Updates the bookmark button and it's actions regarding the stored filter
      * expressions according to the values
      */
-    void updateCurrentStoredFilterExpression( );
+    void updateCurrentStoredFilterExpression();
 
     void filterColumnChanged( QAction *filterAction );
 
   private:
-
     /* replace the search widget with a new one */
     void replaceSearchWidget( QWidget *oldw, QWidget *neww );
 

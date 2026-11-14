@@ -16,25 +16,25 @@
 #define QGSEMBEDDEDSYMBOLRENDERERWIDGET_H
 
 #include "ui_qgsembeddedsymbolrendererwidgetbase.h"
-#include "qgis_sip.h"
-#include "qgsembeddedsymbolrenderer.h"
-#include "qgsrendererwidget.h"
+
 #include "qgis_gui.h"
+#include "qgis_sip.h"
+#include "qgsrendererwidget.h"
 
 class QMenu;
+class QgsEmbeddedSymbolRenderer;
 
 /**
  * \ingroup gui
- * \brief A widget used represent options of a QgsEmbeddedSymbolRenderer
+ * \brief A widget for configuring options for a QgsEmbeddedSymbolRenderer.
  *
  * \since QGIS 3.20
  */
-class GUI_EXPORT QgsEmbeddedSymbolRendererWidget : public QgsRendererWidget, public QgsExpressionContextGenerator, private Ui::QgsEmbeddedSymbolRendererWidgetBase
+class GUI_EXPORT QgsEmbeddedSymbolRendererWidget : public QgsRendererWidget, private Ui::QgsEmbeddedSymbolRendererWidgetBase
 {
     Q_OBJECT
 
   public:
-
     /**
      * Static creation method
      * \param layer the layer where this renderer is applied
@@ -50,6 +50,7 @@ class GUI_EXPORT QgsEmbeddedSymbolRendererWidget : public QgsRendererWidget, pub
      * \param renderer the merged feature renderer (will not take ownership)
      */
     QgsEmbeddedSymbolRendererWidget( QgsVectorLayer *layer, QgsStyle *style, QgsFeatureRenderer *renderer );
+    ~QgsEmbeddedSymbolRendererWidget() override;
 
     QgsFeatureRenderer *renderer() override;
     void setContext( const QgsSymbolWidgetContext &context ) override;
@@ -58,7 +59,6 @@ class GUI_EXPORT QgsEmbeddedSymbolRendererWidget : public QgsRendererWidget, pub
   private:
     //! The renderer
     std::unique_ptr<QgsEmbeddedSymbolRenderer> mRenderer;
-
 };
 
 

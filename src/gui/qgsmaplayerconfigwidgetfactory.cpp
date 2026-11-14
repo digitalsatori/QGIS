@@ -18,8 +18,7 @@
 QgsMapLayerConfigWidgetFactory::QgsMapLayerConfigWidgetFactory( const QString &title, const QIcon &icon )
   : mIcon( icon )
   , mTitle( title )
-{
-}
+{}
 
 QString QgsMapLayerConfigWidgetFactory::layerPropertiesPagePositionHint() const
 {
@@ -30,6 +29,11 @@ bool QgsMapLayerConfigWidgetFactory::supportsLayer( QgsMapLayer *layer ) const
 {
   Q_UNUSED( layer )
   return true;
+}
+
+bool QgsMapLayerConfigWidgetFactory::supportsLayerTreeGroup( QgsLayerTreeGroup * ) const
+{
+  return false;
 }
 
 QgsMapLayerConfigWidgetFactory::ParentPage QgsMapLayerConfigWidgetFactory::parentPage() const

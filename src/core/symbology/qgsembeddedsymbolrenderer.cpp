@@ -14,12 +14,19 @@
  ***************************************************************************/
 
 #include "qgsembeddedsymbolrenderer.h"
+
+#include "qgspainteffect.h"
 #include "qgspainteffectregistry.h"
-#include "qgssymbollayerutils.h"
 #include "qgssinglesymbolrenderer.h"
+#include "qgssymbol.h"
+#include "qgssymbollayerutils.h"
+
+#include <QString>
+
+using namespace Qt::StringLiterals;
 
 QgsEmbeddedSymbolRenderer::QgsEmbeddedSymbolRenderer( QgsSymbol *defaultSymbol )
-  : QgsFeatureRenderer( QStringLiteral( "embeddedSymbol" ) )
+  : QgsFeatureRenderer( u"embeddedSymbol"_s )
   , mDefaultSymbol( defaultSymbol )
 {
   Q_ASSERT( mDefaultSymbol );
@@ -90,7 +97,6 @@ bool QgsEmbeddedSymbolRenderer::usesEmbeddedSymbols() const
 QgsEmbeddedSymbolRenderer *QgsEmbeddedSymbolRenderer::clone() const
 {
   QgsEmbeddedSymbolRenderer *r = new QgsEmbeddedSymbolRenderer( mDefaultSymbol->clone() );
-  r->setUsingSymbolLevels( usingSymbolLevels() );
   copyRendererData( r );
   return r;
 }
@@ -100,31 +106,32 @@ QgsFeatureRenderer::Capabilities QgsEmbeddedSymbolRenderer::capabilities()
   return SymbolLevels;
 }
 
-QgsFeatureRenderer *QgsEmbeddedSymbolRenderer::create( QDomElement &element, const QgsReadWriteContext &context )
+std::unique_ptr<QgsFeatureRenderer> QgsEmbeddedSymbolRenderer::create( QDomElement &element, const QgsReadWriteContext &context )
 {
-  QDomElement symbolsElem = element.firstChildElement( QStringLiteral( "symbols" ) );
+  QDomElement symbolsElem = element.firstChildElement( u"symbols"_s );
   if ( symbolsElem.isNull() )
     return nullptr;
 
   QgsSymbolMap symbolMap = QgsSymbolLayerUtils::loadSymbols( symbolsElem, context );
 
-  if ( !symbolMap.contains( QStringLiteral( "0" ) ) )
+  if ( !symbolMap.contains( u"0"_s ) )
     return nullptr;
 
-  QgsEmbeddedSymbolRenderer *r = new QgsEmbeddedSymbolRenderer( symbolMap.take( QStringLiteral( "0" ) ) );
+  auto r = std::make_unique<QgsEmbeddedSymbolRenderer>( symbolMap.take( u"0"_s ) );
   return r;
 }
 
-QgsEmbeddedSymbolRenderer *QgsEmbeddedSymbolRenderer::convertFromRenderer( const QgsFeatureRenderer *renderer )
+std::unique_ptr<QgsEmbeddedSymbolRenderer> QgsEmbeddedSymbolRenderer::convertFromRenderer( const QgsFeatureRenderer *renderer )
 {
-  if ( renderer->type() == QLatin1String( "embeddedSymbol" ) )
+  if ( renderer->type() == "embeddedSymbol"_L1 )
   {
-    return dynamic_cast<QgsEmbeddedSymbolRenderer *>( renderer->clone() );
+    return std::unique_ptr<QgsEmbeddedSymbolRenderer>( dynamic_cast<QgsEmbeddedSymbolRenderer *>( renderer->clone() ) );
   }
-  else if ( renderer->type() == QLatin1String( "singleSymbol" ) )
+  else if ( renderer->type() == "singleSymbol"_L1 )
   {
-    std::unique_ptr< QgsEmbeddedSymbolRenderer > symbolRenderer = std::make_unique< QgsEmbeddedSymbolRenderer >( static_cast< const QgsSingleSymbolRenderer * >( renderer )->symbol()->clone() );
-    return symbolRenderer.release();
+    auto symbolRenderer = std::make_unique< QgsEmbeddedSymbolRenderer >( static_cast< const QgsSingleSymbolRenderer * >( renderer )->symbol()->clone() );
+    renderer->copyRendererData( symbolRenderer.get() );
+    return symbolRenderer;
   }
   else
   {
@@ -135,25 +142,14 @@ QgsEmbeddedSymbolRenderer *QgsEmbeddedSymbolRenderer::convertFromRenderer( const
 QDomElement QgsEmbeddedSymbolRenderer::save( QDomDocument &doc, const QgsReadWriteContext &context )
 {
   QDomElement rendererElem = doc.createElement( RENDERER_TAG_NAME );
-  rendererElem.setAttribute( QStringLiteral( "type" ), QStringLiteral( "embeddedSymbol" ) );
-  rendererElem.setAttribute( QStringLiteral( "symbollevels" ), ( mUsingSymbolLevels ? QStringLiteral( "1" ) : QStringLiteral( "0" ) ) );
-  rendererElem.setAttribute( QStringLiteral( "forceraster" ), ( mForceRaster ? QStringLiteral( "1" ) : QStringLiteral( "0" ) ) );
+  rendererElem.setAttribute( u"type"_s, u"embeddedSymbol"_s );
 
   QgsSymbolMap symbols;
-  symbols[QStringLiteral( "0" )] = mDefaultSymbol.get();
-  QDomElement symbolsElem = QgsSymbolLayerUtils::saveSymbols( symbols, QStringLiteral( "symbols" ), doc, context );
+  symbols[u"0"_s] = mDefaultSymbol.get();
+  const QDomElement symbolsElem = QgsSymbolLayerUtils::saveSymbols( symbols, u"symbols"_s, doc, context );
   rendererElem.appendChild( symbolsElem );
 
-  if ( mPaintEffect && !QgsPaintEffectRegistry::isDefaultStack( mPaintEffect ) )
-    mPaintEffect->saveProperties( doc, rendererElem );
-
-  if ( !mOrderBy.isEmpty() )
-  {
-    QDomElement orderBy = doc.createElement( QStringLiteral( "orderby" ) );
-    mOrderBy.save( orderBy );
-    rendererElem.appendChild( orderBy );
-  }
-  rendererElem.setAttribute( QStringLiteral( "enableorderby" ), ( mOrderByEnabled ? QStringLiteral( "1" ) : QStringLiteral( "0" ) ) );
+  saveRendererData( doc, rendererElem, context );
 
   return rendererElem;
 }

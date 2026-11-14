@@ -16,13 +16,14 @@
 #ifndef QGSCHECKBOXSEARCHWIDGETWRAPPER_H
 #define QGSCHECKBOXSEARCHWIDGETWRAPPER_H
 
-#include "qgssearchwidgetwrapper.h"
+#include "qgis_gui.h"
 #include "qgis_sip.h"
+#include "qgssearchwidgetwrapper.h"
 
 #include <QComboBox>
-#include <QListWidget>
 #include <QLineEdit>
-#include "qgis_gui.h"
+#include <QListWidget>
+
 class QCheckBox;
 
 class QgsCheckboxWidgetFactory;
@@ -31,7 +32,6 @@ class QgsCheckboxWidgetFactory;
  * \ingroup gui
  * \class QgsCheckboxSearchWidgetWrapper
  * \brief Wraps a checkbox edit widget for searching.
- * \since QGIS 2.16
  */
 
 class GUI_EXPORT QgsCheckboxSearchWidgetWrapper : public QgsSearchWidgetWrapper
@@ -39,7 +39,6 @@ class GUI_EXPORT QgsCheckboxSearchWidgetWrapper : public QgsSearchWidgetWrapper
     Q_OBJECT
 
   public:
-
     /**
      * Constructor for QgsCheckboxSearchWidgetWrapper.
      * \param vl associated vector layer
@@ -80,7 +79,6 @@ class GUI_EXPORT QgsCheckboxSearchWidgetWrapper : public QgsSearchWidgetWrapper
 
   private:
     QCheckBox *mCheckBox = nullptr;
-    QgsVectorLayer *mLayer = nullptr;
 
     friend class QgsCheckboxWidgetFactory;
 };

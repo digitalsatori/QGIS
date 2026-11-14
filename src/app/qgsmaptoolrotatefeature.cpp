@@ -13,30 +13,36 @@
  *                                                                         *
  ***************************************************************************/
 
-#include <QSettings>
-#include <QEvent>
-#include <QHBoxLayout>
-#include <QKeyEvent>
-#include <QLabel>
-
-#include <limits>
-#include <cmath>
-
-#include "qgsadvanceddigitizingdockwidget.h"
 #include "qgsmaptoolrotatefeature.h"
+
+#include <cmath>
+#include <limits>
+
+#include "qgisapp.h"
+#include "qgsadvanceddigitizingdockwidget.h"
+#include "qgsavoidintersectionsoperation.h"
+#include "qgsdoublespinbox.h"
 #include "qgsfeatureiterator.h"
 #include "qgsgeometry.h"
 #include "qgslogger.h"
 #include "qgsmapcanvas.h"
-#include "qgsrubberband.h"
-#include "qgsvectorlayer.h"
-#include "qgstolerance.h"
-#include "qgisapp.h"
-#include "qgsspinbox.h"
-#include "qgsdoublespinbox.h"
-#include "qgssnapindicator.h"
 #include "qgsmapmouseevent.h"
+#include "qgsrubberband.h"
+#include "qgssnapindicator.h"
+#include "qgsspinbox.h"
+#include "qgstolerance.h"
+#include "qgsvectorlayer.h"
 
+#include <QEvent>
+#include <QHBoxLayout>
+#include <QKeyEvent>
+#include <QLabel>
+#include <QSettings>
+#include <QString>
+
+#include "moc_qgsmaptoolrotatefeature.cpp"
+
+using namespace Qt::StringLiterals;
 
 QgsAngleMagnetWidget::QgsAngleMagnetWidget( const QString &label, QWidget *parent )
   : QWidget( parent )
@@ -77,7 +83,7 @@ QgsAngleMagnetWidget::QgsAngleMagnetWidget( const QString &label, QWidget *paren
 
   // connect signals
   mAngleSpinBox->installEventFilter( this );
-  connect( mAngleSpinBox, static_cast < void ( QgsDoubleSpinBox::* )( double ) > ( &QgsDoubleSpinBox::valueChanged ), this, &QgsAngleMagnetWidget::angleSpinBoxValueChanged );
+  connect( mAngleSpinBox, static_cast<void ( QgsDoubleSpinBox::* )( double )>( &QgsDoubleSpinBox::valueChanged ), this, &QgsAngleMagnetWidget::angleSpinBoxValueChanged );
 
   // config focus
   setFocusProxy( mAngleSpinBox );
@@ -142,7 +148,7 @@ void QgsAngleMagnetWidget::angleSpinBoxValueChanged( double angle )
 
 QgsMapToolRotateFeature::QgsMapToolRotateFeature( QgsMapCanvas *canvas )
   : QgsMapToolAdvancedDigitizing( canvas, QgisApp::instance()->cadDockWidget() )
-  , mSnapIndicator( std::make_unique< QgsSnapIndicator>( canvas ) )
+  , mSnapIndicator( std::make_unique<QgsSnapIndicator>( canvas ) )
 {
   mToolName = tr( "Rotate feature" );
 }
@@ -239,10 +245,9 @@ void QgsMapToolRotateFeature::cadCanvasReleaseEvent( QgsMapMouseEvent *e )
       return;
     }
 
-    QgsPointXY layerCoords = toLayerCoordinates( vlayer, e->mapPoint() );
-    double searchRadius = QgsTolerance::vertexSearchRadius( mCanvas->currentLayer(), mCanvas->mapSettings() );
-    QgsRectangle selectRect( layerCoords.x() - searchRadius, layerCoords.y() - searchRadius,
-                             layerCoords.x() + searchRadius, layerCoords.y() + searchRadius );
+    const QgsPointXY layerCoords = toLayerCoordinates( vlayer, e->mapPoint() );
+    const double searchRadius = QgsTolerance::vertexSearchRadius( mCanvas->currentLayer(), mCanvas->mapSettings() );
+    const QgsRectangle selectRect( layerCoords.x() - searchRadius, layerCoords.y() - searchRadius, layerCoords.x() + searchRadius, layerCoords.y() + searchRadius );
 
     mAutoSetAnchorPoint = false;
     if ( !mAnchorPoint )
@@ -257,7 +262,7 @@ void QgsMapToolRotateFeature::cadCanvasReleaseEvent( QgsMapMouseEvent *e )
       QgsFeatureIterator fit = vlayer->getFeatures( QgsFeatureRequest().setFilterRect( selectRect ).setNoAttributes() );
 
       //find the closest feature
-      QgsGeometry pointGeometry = QgsGeometry::fromPointXY( layerCoords );
+      const QgsGeometry pointGeometry = QgsGeometry::fromPointXY( layerCoords );
       if ( pointGeometry.isNull() )
       {
         return;
@@ -271,7 +276,7 @@ void QgsMapToolRotateFeature::cadCanvasReleaseEvent( QgsMapMouseEvent *e )
       {
         if ( f.hasGeometry() )
         {
-          double currentDistance = pointGeometry.distance( f.geometry() );
+          const double currentDistance = pointGeometry.distance( f.geometry() );
           if ( currentDistance < minDistance )
           {
             minDistance = currentDistance;
@@ -286,7 +291,7 @@ void QgsMapToolRotateFeature::cadCanvasReleaseEvent( QgsMapMouseEvent *e )
         return;
       }
 
-      QgsRectangle bound = cf.geometry().boundingBox();
+      const QgsRectangle bound = cf.geometry().boundingBox();
       if ( mAutoSetAnchorPoint )
       {
         mStartPointMapCoords = toMapCoordinates( vlayer, bound.center() );
@@ -302,29 +307,33 @@ void QgsMapToolRotateFeature::cadCanvasReleaseEvent( QgsMapMouseEvent *e )
       mRotatedFeatures.clear();
       mRotatedFeatures << cf.id(); //todo: take the closest feature, not the first one...
 
-      mRubberBand = createRubberBand( vlayer->geometryType() );
-      mRubberBand->setToGeometry( cf.geometry(), vlayer );
+      mRubberBand = createRubberBandForLayer( vlayer, { cf.id() } );
+      mGeom = cf.geometry();
+      mRubberBand->setToGeometry( mGeom, vlayer );
     }
     else
     {
       mRotatedFeatures = vlayer->selectedFeatureIds();
 
-      mRubberBand = createRubberBand( vlayer->geometryType() );
-
       QgsFeature feat;
       QgsFeatureIterator it = vlayer->getSelectedFeatures();
+      QVector<QgsGeometry> selectedGeometries;
+      QList< QgsFeatureId > fids;
       while ( it.nextFeature( feat ) )
       {
-        mRubberBand->addGeometry( feat.geometry(), vlayer, false );
+        selectedGeometries << feat.geometry();
+        fids << feat.id();
       }
-      mRubberBand->updatePosition();
-      mRubberBand->update();
+      mRubberBand = createRubberBandForLayer( vlayer, fids );
+
+      mGeom = QgsGeometry::collectGeometry( selectedGeometries );
+      mRubberBand->setToGeometry( mGeom, vlayer );
     }
 
     mRubberBand->show();
 
-    double XDistance = mInitialPos.x() - mAnchorPoint->center().x();
-    double YDistance = mInitialPos.y() - mAnchorPoint->center().y();
+    const double XDistance = mInitialPos.x() - mAnchorPoint->center().x();
+    const double YDistance = mInitialPos.y() - mAnchorPoint->center().y();
     mRotationOffset = std::atan2( XDistance, YDistance ) * ( 180 / M_PI );
 
     createRotationWidget();
@@ -363,15 +372,28 @@ void QgsMapToolRotateFeature::updateRubberband( double rotation )
   if ( mRotationActive )
   {
     mRotation = rotation;
-
     mStPoint = toCanvasCoordinates( mStartPointMapCoords );
-    double offsetX = mStPoint.x() - mRubberBand->x();
-    double offsetY = mStPoint.y() - mRubberBand->y();
 
     if ( mRubberBand )
     {
-      mRubberBand->setTransform( QTransform().translate( offsetX, offsetY ).rotate( mRotation ).translate( -1 * offsetX, -1 * offsetY ) );
-      mRubberBand->update();
+      QgsVectorLayer *vlayer = currentVectorLayer();
+
+      // When MapCanvas crs == layer crs, fast rubberband rotation
+      if ( vlayer->crs() == canvas()->mapSettings().destinationCrs() )
+      {
+        const double offsetX = mStPoint.x() - mRubberBand->x();
+        const double offsetY = mStPoint.y() - mRubberBand->y();
+        mRubberBand->setTransform( QTransform().translate( offsetX, offsetY ).rotate( mRotation ).translate( -1 * offsetX, -1 * offsetY ) );
+        mRubberBand->update();
+      }
+      // Else, recreate the rubber band from the rotated geometries
+      else
+      {
+        const QgsPointXY anchorPoint = toLayerCoordinates( vlayer, mStartPointMapCoords );
+        QgsGeometry geom = mGeom;
+        geom.rotate( mRotation, anchorPoint );
+        mRubberBand->setToGeometry( geom, vlayer );
+      }
     }
   }
 }
@@ -391,7 +413,7 @@ void QgsMapToolRotateFeature::applyRotation( double rotation )
     return;
   }
 
-  QgsPointXY anchorPoint = toLayerCoordinates( vlayer, mStartPointMapCoords );
+  const QgsPointXY anchorPoint = toLayerCoordinates( vlayer, mStartPointMapCoords );
 
   vlayer->beginEditCommand( tr( "Features Rotated" ) );
 
@@ -399,11 +421,35 @@ void QgsMapToolRotateFeature::applyRotation( double rotation )
   request.setFilterFids( mRotatedFeatures ).setNoAttributes();
   QgsFeatureIterator fi = vlayer->getFeatures( request );
   QgsFeature f;
+
+  QgsAvoidIntersectionsOperation avoidIntersections;
+  connect( &avoidIntersections, &QgsAvoidIntersectionsOperation::messageEmitted, this, &QgsMapTool::messageEmitted );
+
+  // when removing intersections don't check for intersections with selected features
+  const QHash<QgsVectorLayer *, QSet<QgsFeatureId>> ignoreFeatures { { vlayer, mRotatedFeatures } };
+
   while ( fi.nextFeature( f ) )
   {
-    QgsFeatureId id = f.id();
+    const QgsFeatureId id = f.id();
     QgsGeometry geom = f.geometry();
     geom.rotate( mRotation, anchorPoint );
+
+    if ( vlayer->geometryType() == Qgis::GeometryType::Polygon )
+    {
+      const QgsAvoidIntersectionsOperation::Result res = avoidIntersections.apply( vlayer, id, geom, ignoreFeatures );
+
+      if ( res.operationResult == Qgis::GeometryOperationResult::InvalidInputGeometryType || geom.isEmpty() )
+      {
+        const QString errorMessage = ( geom.isEmpty() ) ? tr( "The feature cannot be rotated because the resulting geometry would be empty" ) : tr( "An error was reported during intersection removal" );
+
+        emit messageEmitted( errorMessage, Qgis::MessageLevel::Warning );
+        vlayer->destroyEditCommand();
+        deleteRotationWidget();
+        deleteRubberband();
+        return;
+      }
+    }
+
     vlayer->changeGeometry( id, geom );
   }
 
@@ -444,7 +490,7 @@ void QgsMapToolRotateFeature::activate()
 
   if ( vlayer->selectedFeatureCount() > 0 )
   {
-    QgsRectangle bound = vlayer->boundingBoxOfSelected();
+    const QgsRectangle bound = vlayer->boundingBoxOfSelected();
     mStartPointMapCoords = toMapCoordinates( vlayer, bound.center() );
 
     mAnchorPoint = std::make_unique<QgsVertexMarker>( mCanvas );
@@ -460,6 +506,7 @@ void QgsMapToolRotateFeature::deleteRubberband()
 {
   delete mRubberBand;
   mRubberBand = nullptr;
+  mGeom = QgsGeometry();
 }
 
 void QgsMapToolRotateFeature::deactivate()
@@ -482,7 +529,7 @@ void QgsMapToolRotateFeature::createRotationWidget()
 
   deleteRotationWidget();
 
-  mRotationWidget = new QgsAngleMagnetWidget( QStringLiteral( "Rotation:" ) );
+  mRotationWidget = new QgsAngleMagnetWidget( u"Rotation:"_s );
   QgisApp::instance()->addUserInputWidget( mRotationWidget );
   mRotationWidget->setFocus( Qt::TabFocusReason );
 
@@ -504,5 +551,3 @@ void QgsMapToolRotateFeature::deleteRotationWidget()
   }
   mRotationWidget = nullptr;
 }
-
-

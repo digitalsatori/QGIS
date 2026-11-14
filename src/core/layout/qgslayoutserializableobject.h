@@ -18,8 +18,8 @@
 #ifndef QGSLAYOUTSERIALIZABLEOBJECT_H
 #define QGSLAYOUTSERIALIZABLEOBJECT_H
 
-#include "qgis_sip.h"
 #include "qgis_core.h"
+#include "qgis_sip.h"
 #include "qgslayoutundocommand.h"
 
 class QDomElement;
@@ -30,12 +30,10 @@ class QgsAbstractLayoutUndoCommand;
 /**
  * \ingroup core
  * \brief An interface for layout objects which can be stored and read from DOM elements.
- * \since QGIS 3.0
 */
 class CORE_EXPORT QgsLayoutSerializableObject : public QgsLayoutUndoObjectInterface
 {
   public:
-
     /**
      * Returns the object type as a string.
      *
@@ -63,9 +61,7 @@ class CORE_EXPORT QgsLayoutSerializableObject : public QgsLayoutUndoObjectInterf
     QgsAbstractLayoutUndoCommand *createCommand( const QString &text, int id, QUndoCommand *parent = nullptr ) override SIP_FACTORY;
 
   private:
-
     friend class QgsLayoutSerializableObjectUndoCommand;
-
 };
 
 #endif // QGSLAYOUTSERIALIZABLEOBJECT_H

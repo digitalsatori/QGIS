@@ -14,100 +14,49 @@
  ***************************************************************************/
 
 #include "qgsappmaptools.h"
+
+#include "qgisapp.h"
 #include "qgsmaptool.h"
-#include "qgsmaptoolselect.h"
-#include "qgsmaptoolidentifyaction.h"
 #include "qgsmaptooladdfeature.h"
-#include "qgsmaptoolzoom.h"
-#include "qgsmaptoolpan.h"
-#include "qgsmaptoolfeatureaction.h"
-#include "qgsmeasuretool.h"
-#include "qgsmaptooltextannotation.h"
-#include "qgsmaptoolhtmlannotation.h"
-#include "qgsmaptoolannotation.h"
-#include "qgsmaptoolcircle2points.h"
-#include "qgsmaptoolcircle3points.h"
-#include "qgsmaptoolcircle2tangentspoint.h"
-#include "qgsmaptoolmeasureangle.h"
-#include "qgsmaptoolformannotation.h"
-#include "qgsmaptoolsvgannotation.h"
-#include "qgsmaptoolcircularstringcurvepoint.h"
-#include "qgsmaptoolcircularstringradius.h"
-#include "qgsmaptoolcircle3tangents.h"
-#include "qgsmaptoolcirclecenterpoint.h"
-#include "qgsmaptoolellipsecenter2points.h"
-#include "qgsmaptoolellipsecenterpoint.h"
-#include "qgsmaptoolellipseextent.h"
-#include "qgsmaptoolellipsefoci.h"
-#include "qgsmaptoolrectangle3points.h"
-#include "qgsmaptoolrectanglecenter.h"
-#include "qgsmaptoolrectangleextent.h"
-#include "qgsmaptoolregularpolygon2points.h"
-#include "qgsmaptoolregularpolygoncentercorner.h"
-#include "qgsmaptoolregularpolygoncenterpoint.h"
-#include "qgsmaptoolrotatefeature.h"
-#include "qgsmaptoolscalefeature.h"
-#include "qgsmaptoolmovefeature.h"
-#include "qgsmaptooloffsetcurve.h"
-#include "qgsmaptoolreshape.h"
-#include "qgsmaptoolsplitfeatures.h"
-#include "qgsmaptoolsplitparts.h"
-#include "qgsmaptoolreverseline.h"
+#include "qgsmaptooladdpart.h"
 #include "qgsmaptooladdring.h"
-#include "qgsmaptoolfillring.h"
-#include "qgsmaptoolsimplify.h"
+#include "qgsmaptoolchamferfillet.h"
+#include "qgsmaptoolchangelabelproperties.h"
 #include "qgsmaptooldeletepart.h"
 #include "qgsmaptooldeletering.h"
-#include "qgsmaptooladdpart.h"
-#include "vertextool/qgsvertextool.h"
-#include "qgsmaptoolrotatepointsymbols.h"
-#include "qgsmaptoolrotatelabel.h"
-#include "qgsmaptooltrimextendfeature.h"
-#include "qgsmaptoolshowhidelabels.h"
+#include "qgsmaptooleditmeshframe.h"
+#include "qgsmaptoolfeatureaction.h"
+#include "qgsmaptoolfeaturearray.h"
+#include "qgsmaptoolfillring.h"
+#include "qgsmaptoolformannotation.h"
+#include "qgsmaptoolhtmlannotation.h"
+#include "qgsmaptoolidentifyaction.h"
+#include "qgsmaptoolmeasureangle.h"
+#include "qgsmaptoolmeasurebearing.h"
+#include "qgsmaptoolmodifyannotation.h"
+#include "qgsmaptoolmovefeature.h"
 #include "qgsmaptoolmovelabel.h"
-#include "qgsmaptoolchangelabelproperties.h"
-#include "qgsmaptoolpinlabels.h"
+#include "qgsmaptooloffsetcurve.h"
 #include "qgsmaptooloffsetpointsymbol.h"
-#include "qgsspinbox.h"
-
-//
-// QgsStreamDigitizingSettingsAction
-//
-
-QgsStreamDigitizingSettingsAction::QgsStreamDigitizingSettingsAction( QWidget *parent )
-  : QWidgetAction( parent )
-{
-  QGridLayout *gLayout = new QGridLayout();
-  gLayout->setContentsMargins( 3, 2, 3, 2 );
-
-  QgsSettings settings;
-  int defaultTolerance = settings.value( QStringLiteral( "/qgis/digitizing/stream_tolerance" ), 2 ).toInt();
-
-  mStreamToleranceSpinBox = new QgsSpinBox();
-  mStreamToleranceSpinBox->setSuffix( tr( "px" ) );
-  mStreamToleranceSpinBox->setKeyboardTracking( false );
-  mStreamToleranceSpinBox->setRange( 1, 200 );
-  mStreamToleranceSpinBox->setWrapping( false );
-  mStreamToleranceSpinBox->setSingleStep( 1 );
-  mStreamToleranceSpinBox->setClearValue( 2 );
-  mStreamToleranceSpinBox->setValue( defaultTolerance );
-
-  QLabel *label = new QLabel( tr( "Streaming Tolerance" ) );
-  gLayout->addWidget( label, 1, 0 );
-  gLayout->addWidget( mStreamToleranceSpinBox, 1, 1 );
-  connect( mStreamToleranceSpinBox, qOverload<int>( &QgsSpinBox::valueChanged ), this, [ = ]( int value )
-  {
-    QgsSettings settings;
-    settings.setValue( QStringLiteral( "/qgis/digitizing/stream_tolerance" ), value );
-  } );
-
-  QWidget *w = new QWidget();
-  w->setLayout( gLayout );
-  setDefaultWidget( w );
-}
-
-QgsStreamDigitizingSettingsAction::~QgsStreamDigitizingSettingsAction() = default;
-
+#include "qgsmaptoolpan.h"
+#include "qgsmaptoolpinlabels.h"
+#include "qgsmaptoolreshape.h"
+#include "qgsmaptoolreverseline.h"
+#include "qgsmaptoolrotatefeature.h"
+#include "qgsmaptoolrotatelabel.h"
+#include "qgsmaptoolrotatepointsymbols.h"
+#include "qgsmaptoolscalefeature.h"
+#include "qgsmaptoolselect.h"
+#include "qgsmaptoolselectannotation.h"
+#include "qgsmaptoolshowhidelabels.h"
+#include "qgsmaptoolsimplify.h"
+#include "qgsmaptoolsplitfeatures.h"
+#include "qgsmaptoolsplitparts.h"
+#include "qgsmaptooltrimextendfeature.h"
+#include "qgsmaptoolzoom.h"
+#include "qgsmeasuretool.h"
+#include "qgssettingsregistrycore.h"
+#include "vertextool/qgsvertextool.h"
 
 //
 // QgsAppMapTools
@@ -123,36 +72,17 @@ QgsAppMapTools::QgsAppMapTools( QgsMapCanvas *canvas, QgsAdvancedDigitizingDockW
   mTools.insert( Tool::MeasureDistance, new QgsMeasureTool( canvas, false /* area */ ) );
   mTools.insert( Tool::MeasureArea, new QgsMeasureTool( canvas, true /* area */ ) );
   mTools.insert( Tool::MeasureAngle, new QgsMapToolMeasureAngle( canvas ) );
-  mTools.insert( Tool::TextAnnotation, new QgsMapToolTextAnnotation( canvas ) );
+  mTools.insert( Tool::MeasureBearing, new QgsMapToolMeasureBearing( canvas ) );
   mTools.insert( Tool::FormAnnotation, new QgsMapToolFormAnnotation( canvas ) );
   mTools.insert( Tool::HtmlAnnotation, new QgsMapToolHtmlAnnotation( canvas ) );
-  mTools.insert( Tool::SvgAnnotation, new QgsMapToolSvgAnnotation( canvas ) );
-  mTools.insert( Tool::Annotation, new QgsMapToolAnnotation( canvas ) );
-  mTools.insert( Tool::AddFeature, new QgsMapToolAddFeature( canvas, QgsMapToolCapture::CaptureNone ) );
-  QgsMapToolCapture *addFeatureTool = qobject_cast< QgsMapToolCapture *>( mTools.value( Tool::AddFeature ) );
-  mTools.insert( Tool::CircularStringCurvePoint, new QgsMapToolCircularStringCurvePoint( addFeatureTool, canvas ) );
-  mTools.insert( Tool::CircularStringRadius, new QgsMapToolCircularStringRadius( addFeatureTool, canvas ) );
-  mTools.insert( Tool::Circle2Points, new QgsMapToolCircle2Points( addFeatureTool, canvas ) );
-  mTools.insert( Tool::Circle3Points, new QgsMapToolCircle3Points( addFeatureTool, canvas ) );
-  mTools.insert( Tool::Circle3Tangents, new QgsMapToolCircle3Tangents( addFeatureTool, canvas ) );
-  mTools.insert( Tool::Circle2TangentsPoint, new QgsMapToolCircle2TangentsPoint( addFeatureTool, canvas ) );
-  mTools.insert( Tool::CircleCenterPoint, new QgsMapToolCircleCenterPoint( addFeatureTool, canvas ) );
-  mTools.insert( Tool::EllipseCenter2Points, new QgsMapToolEllipseCenter2Points( addFeatureTool, canvas ) );
-  mTools.insert( Tool::EllipseCenterPoint, new QgsMapToolEllipseCenterPoint( addFeatureTool, canvas ) );
-  mTools.insert( Tool::EllipseExtent, new QgsMapToolEllipseExtent( addFeatureTool, canvas ) );
-  mTools.insert( Tool::EllipseFoci, new QgsMapToolEllipseFoci( addFeatureTool, canvas ) );
-  mTools.insert( Tool::RectangleCenterPoint, new QgsMapToolRectangleCenter( addFeatureTool, canvas ) );
-  mTools.insert( Tool::RectangleExtent, new QgsMapToolRectangleExtent( addFeatureTool, canvas ) );
-  mTools.insert( Tool::Rectangle3PointsDistance, new QgsMapToolRectangle3Points( addFeatureTool, canvas, QgsMapToolRectangle3Points::DistanceMode ) );
-  mTools.insert( Tool::Rectangle3PointsProjected, new QgsMapToolRectangle3Points( addFeatureTool, canvas, QgsMapToolRectangle3Points::ProjectedMode ) );
-  mTools.insert( Tool::RegularPolygon2Points, new QgsMapToolRegularPolygon2Points( addFeatureTool, canvas ) );
-  mTools.insert( Tool::RegularPolygonCenterPoint, new QgsMapToolRegularPolygonCenterPoint( addFeatureTool, canvas ) );
-  mTools.insert( Tool::RegularPolygonCenterCorner, new QgsMapToolRegularPolygonCenterCorner( addFeatureTool, canvas ) );
+  mTools.insert( Tool::AddFeature, new QgsMapToolAddFeature( canvas, cadDock, QgsMapToolCapture::CaptureNone ) );
   mTools.insert( Tool::MoveFeature, new QgsMapToolMoveFeature( canvas, QgsMapToolMoveFeature::Move ) );
   mTools.insert( Tool::MoveFeatureCopy, new QgsMapToolMoveFeature( canvas, QgsMapToolMoveFeature::CopyMove ) );
+  mTools.insert( Tool::FeatureArrayCopy, new QgsMapToolFeatureArray( canvas ) );
   mTools.insert( Tool::RotateFeature, new QgsMapToolRotateFeature( canvas ) );
   mTools.insert( Tool::ScaleFeature, new QgsMapToolScaleFeature( canvas ) );
   mTools.insert( Tool::OffsetCurve, new QgsMapToolOffsetCurve( canvas ) );
+  mTools.insert( Tool::ChamferFillet, new QgsMapToolChamferFillet( canvas ) );
   mTools.insert( Tool::ReshapeFeatures, new QgsMapToolReshape( canvas ) );
   mTools.insert( Tool::ReverseLine, new QgsMapToolReverseLine( canvas ) );
   mTools.insert( Tool::SplitFeatures, new QgsMapToolSplitFeatures( canvas ) );
@@ -177,8 +107,9 @@ QgsAppMapTools::QgsAppMapTools( QgsMapCanvas *canvas, QgsAdvancedDigitizingDockW
   mTools.insert( Tool::MoveLabel, new QgsMapToolMoveLabel( canvas, cadDock ) );
   mTools.insert( Tool::RotateLabel, new QgsMapToolRotateLabel( canvas, cadDock ) );
   mTools.insert( Tool::ChangeLabelProperties, new QgsMapToolChangeLabelProperties( canvas, cadDock ) );
-
-  mStreamDigitizingSettingsAction = new QgsStreamDigitizingSettingsAction();
+  mTools.insert( Tool::EditMeshFrame, new QgsMapToolEditMeshFrame( canvas ) );
+  mTools.insert( Tool::AnnotationEdit, new QgsMapToolModifyAnnotation( canvas, cadDock ) );
+  mTools.insert( Tool::AnnotationSelect, new QgsMapToolSelectAnnotation( canvas, cadDock ) );
 }
 
 QgsAppMapTools::~QgsAppMapTools()
@@ -197,17 +128,11 @@ QgsMapTool *QgsAppMapTools::mapTool( QgsAppMapTools::Tool tool )
 
 QList<QgsMapToolCapture *> QgsAppMapTools::captureTools() const
 {
-  QList< QgsMapToolCapture * > res;
+  QList<QgsMapToolCapture *> res;
   for ( auto it = mTools.constBegin(); it != mTools.constEnd(); ++it )
   {
-    if ( QgsMapToolCapture *captureTool = qobject_cast< QgsMapToolCapture * >( it.value() ) )
+    if ( QgsMapToolCapture *captureTool = qobject_cast<QgsMapToolCapture *>( it.value() ) )
       res << captureTool;
   }
   return res;
 }
-
-QWidgetAction *QgsAppMapTools::streamDigitizingSettingsAction()
-{
-  return mStreamDigitizingSettingsAction;
-}
-

@@ -16,12 +16,13 @@
 #ifndef QGSFILEDOWNLOADER_H
 #define QGSFILEDOWNLOADER_H
 
-#include <QObject>
+#include "qgis.h"
+#include "qgis_core.h"
+
 #include <QFile>
 #include <QNetworkReply>
+#include <QObject>
 #include <QUrl>
-
-#include "qgis_core.h"
 
 #ifndef QT_NO_SSL
 #include <QSslError>
@@ -29,7 +30,7 @@
 
 /**
  * \ingroup core
- * \brief QgsFileDownloader is a utility class for downloading files.
+ * \brief A utility class for downloading files.
  *
  * To use this class, it is necessary to pass the URL and an output file name as
  * arguments to the constructor, the download will start immediately.
@@ -40,13 +41,11 @@
  * An optional authentication configuration can be specified.
  *
  * \note This class was part of the GUI library from QGIS 2.18.1 until QGIS 3.0
- * \since QGIS 3.0
  */
 class CORE_EXPORT QgsFileDownloader : public QObject
 {
     Q_OBJECT
   public:
-
     /**
      * QgsFileDownloader
      * \param url the download URL
@@ -56,8 +55,12 @@ class CORE_EXPORT QgsFileDownloader : public QObject
      * be triggered by a later call to startDownload(). This can be useful if connections need
      * to be made to the downloader and there's a chance the download will emit
      * signals before these connections have been made.
+     * \param httpMethod Method for the HTTP request : GET or POST, since QGIS 3.22
+     * \param data If the request is POST, some data can be added, since QGIS 3.22
      */
-    QgsFileDownloader( const QUrl &url, const QString &outputFileName, const QString &authcfg = QString(), bool delayStart = false );
+    QgsFileDownloader(
+      const QUrl &url, const QString &outputFileName, const QString &authcfg = QString(), bool delayStart = false, Qgis::HttpMethod httpMethod = Qgis::HttpMethod::Get, const QByteArray &data = QByteArray()
+    );
 
   signals:
     //! Emitted when the download has completed successfully
@@ -112,7 +115,6 @@ class CORE_EXPORT QgsFileDownloader : public QObject
     ~QgsFileDownloader() override;
 
   private:
-
     /**
      * Abort current request and show an error if the instance has GUI
      * notifications enabled.
@@ -122,7 +124,9 @@ class CORE_EXPORT QgsFileDownloader : public QObject
     QUrl mUrl;
     QNetworkReply *mReply = nullptr;
     QFile mFile;
-    bool mDownloadCanceled;
+    bool mDownloadCanceled = false;
+    Qgis::HttpMethod mHttpMethod = Qgis::HttpMethod::Get;
+    QByteArray mData;
     QStringList mErrors;
     QString mAuthCfg;
 };

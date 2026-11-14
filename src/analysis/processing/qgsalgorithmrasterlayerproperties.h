@@ -19,10 +19,11 @@
 #ifndef QGSALGORITHMRASTERLAYERPROPERTIES_H
 #define QGSALGORITHMRASTERLAYERPROPERTIES_H
 
-#define SIP_NO_FILE
 
 #include "qgis_sip.h"
 #include "qgsprocessingalgorithm.h"
+
+#define SIP_NO_FILE
 
 ///@cond PRIVATE
 
@@ -31,9 +32,7 @@
  */
 class QgsRasterLayerPropertiesAlgorithm : public QgsProcessingAlgorithm
 {
-
   public:
-
     QgsRasterLayerPropertiesAlgorithm() = default;
     void initAlgorithm( const QVariantMap &configuration = QVariantMap() ) override;
     QString name() const override;
@@ -42,30 +41,25 @@ class QgsRasterLayerPropertiesAlgorithm : public QgsProcessingAlgorithm
     QString group() const override;
     QString groupId() const override;
     QString shortHelpString() const override;
+    QString shortDescription() const override;
     QgsRasterLayerPropertiesAlgorithm *createInstance() const override SIP_FACTORY;
 
   protected:
-
     bool prepareAlgorithm( const QVariantMap &parameters, QgsProcessingContext &context, QgsProcessingFeedback *feedback ) override;
-    QVariantMap processAlgorithm( const QVariantMap &parameters,
-                                  QgsProcessingContext &context, QgsProcessingFeedback *feedback ) override;
+    QVariantMap processAlgorithm( const QVariantMap &parameters, QgsProcessingContext &context, QgsProcessingFeedback *feedback ) override;
 
   private:
-
     int mBandCount = 0;
     bool mHasNoDataValue = false;
     QVariant mNoDataValue;
-    int mLayerWidth;
-    int mLayerHeight;
+    int mLayerWidth = 0;
+    int mLayerHeight = 0;
     QgsRectangle mExtent;
     QgsCoordinateReferenceSystem mCrs;
-    double mRasterUnitsPerPixelX;
-    double mRasterUnitsPerPixelY;
-
+    double mRasterUnitsPerPixelX = 0;
+    double mRasterUnitsPerPixelY = 0;
 };
 
 ///@endcond PRIVATE
 
 #endif // QGSALGORITHMRASTERLAYERPROPERTIES_H
-
-

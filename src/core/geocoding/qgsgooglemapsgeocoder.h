@@ -39,9 +39,7 @@
 */
 class CORE_EXPORT QgsGoogleMapsGeocoder : public QgsGeocoderInterface
 {
-
   public:
-
     /**
      * Constructor for QgsGoogleMapsGeocoder.
      *
@@ -56,7 +54,7 @@ class CORE_EXPORT QgsGoogleMapsGeocoder : public QgsGeocoderInterface
 
     Flags flags() const override;
     QgsFields appendedFields() const override;
-    QgsWkbTypes::Type wkbType() const override;
+    Qgis::WkbType wkbType() const override;
     QList< QgsGeocoderResult > geocodeString( const QString &string, const QgsGeocoderContext &context, QgsFeedback *feedback = nullptr ) const override;
 
     /**
@@ -108,13 +106,11 @@ class CORE_EXPORT QgsGoogleMapsGeocoder : public QgsGeocoderInterface
     void setRegion( const QString &region );
 
   private:
-
     QString mApiKey;
     QString mRegion;
     QString mEndpoint;
 
     static QReadWriteLock sMutex;
-
 };
 
 #endif // QGSGOOGLEMAPSGEOCODER_H

@@ -17,22 +17,25 @@
  ***************************************************************************/
 
 #include "qgsservercachemanager.h"
-#include "qgsserverprojectutils.h"
-#include "qgsmessagelog.h"
-#include "qgis.h"
 
-QgsServerCacheManager::QgsServerCacheManager( const QgsServerSettings &settings ):
-  mSettings( settings )
+#include <memory>
+
+#include "qgis.h"
+#include "qgsmessagelog.h"
+#include "qgsserverprojectutils.h"
+
+QgsServerCacheManager::QgsServerCacheManager( const QgsServerSettings &settings )
+  : mSettings( settings )
 {
-  mPluginsServerCaches.reset( new QgsServerCacheFilterMap() );
+  mPluginsServerCaches = std::make_unique<QgsServerCacheFilterMap>();
 }
 
-QgsServerCacheManager::QgsServerCacheManager( const QgsServerCacheManager &copy ):
-  mSettings( copy.mSettings )
+QgsServerCacheManager::QgsServerCacheManager( const QgsServerCacheManager &copy )
+  : mSettings( copy.mSettings )
 {
   if ( copy.mPluginsServerCaches )
   {
-    mPluginsServerCaches.reset( new QgsServerCacheFilterMap( *copy.mPluginsServerCaches ) );
+    mPluginsServerCaches = std::make_unique<QgsServerCacheFilterMap>( *copy.mPluginsServerCaches );
   }
   else
   {
@@ -44,7 +47,7 @@ QgsServerCacheManager &QgsServerCacheManager::operator=( const QgsServerCacheMan
 {
   if ( copy.mPluginsServerCaches )
   {
-    mPluginsServerCaches.reset( new QgsServerCacheFilterMap( *copy.mPluginsServerCaches ) );
+    mPluginsServerCaches = std::make_unique<QgsServerCacheFilterMap>( *copy.mPluginsServerCaches );
   }
   else
   {
@@ -61,7 +64,7 @@ QgsServerCacheManager::~QgsServerCacheManager()
 bool QgsServerCacheManager::getCachedDocument( QDomDocument *doc, const QgsProject *project, const QgsServerRequest &request, QgsAccessControl *accessControl ) const
 {
   bool cache = true;
-  QString key = getCacheKey( cache, accessControl, request );
+  const QString key = getCacheKey( cache, accessControl, request );
 
   if ( !cache )
   {
@@ -94,7 +97,7 @@ bool QgsServerCacheManager::getCachedDocument( QDomDocument *doc, const QgsProje
 bool QgsServerCacheManager::setCachedDocument( const QDomDocument *doc, const QgsProject *project, const QgsServerRequest &request, QgsAccessControl *accessControl ) const
 {
   bool cache = true;
-  QString key = getCacheKey( cache, accessControl, request );
+  const QString key = getCacheKey( cache, accessControl, request );
 
   if ( !cache )
   {
@@ -115,7 +118,7 @@ bool QgsServerCacheManager::setCachedDocument( const QDomDocument *doc, const Qg
 bool QgsServerCacheManager::deleteCachedDocument( const QgsProject *project, const QgsServerRequest &request, QgsAccessControl *accessControl ) const
 {
   bool cache = true;
-  QString key = getCacheKey( cache, accessControl, request );
+  const QString key = getCacheKey( cache, accessControl, request );
 
   QgsServerCacheFilterMap::const_iterator scIterator;
   for ( scIterator = mPluginsServerCaches->constBegin(); scIterator != mPluginsServerCaches->constEnd(); ++scIterator )
@@ -144,7 +147,7 @@ bool QgsServerCacheManager::deleteCachedDocuments( const QgsProject *project ) c
 QByteArray QgsServerCacheManager::getCachedImage( const QgsProject *project, const QgsServerRequest &request, QgsAccessControl *accessControl ) const
 {
   bool cache = true;
-  QString key = getCacheKey( cache, accessControl, request );
+  const QString key = getCacheKey( cache, accessControl, request );
 
   QgsServerCacheFilterMap::const_iterator scIterator;
   for ( scIterator = mPluginsServerCaches->constBegin(); scIterator != mPluginsServerCaches->constEnd(); ++scIterator )
@@ -161,7 +164,7 @@ QByteArray QgsServerCacheManager::getCachedImage( const QgsProject *project, con
 bool QgsServerCacheManager::setCachedImage( const QByteArray *img, const QgsProject *project, const QgsServerRequest &request, QgsAccessControl *accessControl ) const
 {
   bool cache = true;
-  QString key = getCacheKey( cache, accessControl, request );
+  const QString key = getCacheKey( cache, accessControl, request );
 
   QgsServerCacheFilterMap::const_iterator scIterator;
   for ( scIterator = mPluginsServerCaches->constBegin(); scIterator != mPluginsServerCaches->constEnd(); ++scIterator )
@@ -177,7 +180,7 @@ bool QgsServerCacheManager::setCachedImage( const QByteArray *img, const QgsProj
 bool QgsServerCacheManager::deleteCachedImage( const QgsProject *project, const QgsServerRequest &request, QgsAccessControl *accessControl ) const
 {
   bool cache = true;
-  QString key = getCacheKey( cache, accessControl, request );
+  const QString key = getCacheKey( cache, accessControl, request );
 
   QgsServerCacheFilterMap::const_iterator scIterator;
   for ( scIterator = mPluginsServerCaches->constBegin(); scIterator != mPluginsServerCaches->constEnd(); ++scIterator )

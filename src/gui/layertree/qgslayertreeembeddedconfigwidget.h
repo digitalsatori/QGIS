@@ -17,6 +17,7 @@
 #define QGSLAYERTREEEMBEDDEDCONFIGWIDGET_H
 
 #include "ui_qgslayertreeembeddedconfigwidgetbase.h"
+
 #include "qgis.h"
 #include "qgis_gui.h"
 
@@ -26,13 +27,11 @@ class QgsMapLayer;
  * \ingroup gui
  * \class QgsLayerTreeEmbeddedConfigWidget
  * \brief A widget to configure layer tree embedded widgets for a particular map layer.
- * \since QGIS 2.16
  */
-class GUI_EXPORT QgsLayerTreeEmbeddedConfigWidget : public QWidget, protected Ui::QgsLayerTreeEmbeddedConfigWidgetBase
+class GUI_EXPORT QgsLayerTreeEmbeddedConfigWidget : public QWidget, private Ui::QgsLayerTreeEmbeddedConfigWidgetBase
 {
     Q_OBJECT
   public:
-
     /**
      * A widget to configure layer tree embedded widgets for a particular map layer.
      * \param parent The parent of the widget.

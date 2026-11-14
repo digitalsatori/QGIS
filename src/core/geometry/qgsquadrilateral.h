@@ -20,9 +20,13 @@
 
 
 #include "qgis_core.h"
+#include "qgslinestring.h"
 #include "qgspoint.h"
 #include "qgspolygon.h"
-#include "qgslinestring.h"
+
+#include <QString>
+
+using namespace Qt::StringLiterals;
 
 /**
  * \ingroup core
@@ -36,11 +40,12 @@
 class CORE_EXPORT QgsQuadrilateral
 {
   public:
-
+    // clang-format off
     /**
      * Constructor for an empty quadrilateral geometry.
      */
     QgsQuadrilateral() SIP_HOLDGIL;
+    // clang-format on
 
     /**
      * Construct a QgsQuadrilateral from four QgsPoint.
@@ -70,7 +75,7 @@ class CORE_EXPORT QgsQuadrilateral
     enum ConstructionOption
     {
       Distance, //!< Second distance is equal to the distance between 2nd and 3rd point
-      Projected, //!< Second distance is equal to the distance of the perpendicualr projection of the 3rd point on the segment or its extension.
+      Projected, //!< Second distance is equal to the distance of the perpendicular projection of the 3rd point on the segment or its extension.
     };
 
     /**
@@ -80,6 +85,7 @@ class CORE_EXPORT QgsQuadrilateral
      * the z used will be the one of the first point with a Z.
      * This ensures consistency in point types and the ability to export to a
      * Polygon or LineString.
+     * M is taken from point \a p1.
      * \param p1 first point
      * \param p2 second point
      * \param p3 third point
@@ -91,7 +97,8 @@ class CORE_EXPORT QgsQuadrilateral
     /**
      * Construct a QgsQuadrilateral as a rectangle from an extent, defined by
      * two opposite corner points.
-     * Z is taken from point \a p1.
+     * Z and M are taken from point \a p1.
+     * QgsQuadrilateral will have the same dimension as \a p1 dimension.
      * \param p1 first point
      * \param p2 second point
      */
@@ -107,7 +114,8 @@ class CORE_EXPORT QgsQuadrilateral
 
     /**
      * Construct a QgsQuadrilateral as a square from a diagonal.
-     * Z is taken from point \a p1.
+     * Z and M are taken from point \a p1.
+     * QgsQuadrilateral will have the same dimension as \a p1 dimension.
      * \param p1 first point
      * \param p2 second point
      */
@@ -116,7 +124,8 @@ class CORE_EXPORT QgsQuadrilateral
     /**
      * Construct a QgsQuadrilateral as a rectangle from center point \a center
      * and another point \a point.
-     * Z is taken from \a center point.
+     * Z and M are taken from point \a p1.
+     * QgsQuadrilateral will have the same dimension as \a center dimension.
      * \param center center point
      * \param point corner point
      */
@@ -184,12 +193,12 @@ class CORE_EXPORT QgsQuadrilateral
     /**
      * Returns the quadrilateral as a new polygon. Ownership is transferred to the caller.
      */
-    QgsPolygon *toPolygon( bool force2D = false ) const SIP_FACTORY;
+    std::unique_ptr<QgsPolygon> toPolygon( bool force2D = false ) const;
 
     /**
      * Returns the quadrilateral as a new linestring. Ownership is transferred to the caller.
      */
-    QgsLineString *toLineString( bool force2D = false ) const SIP_FACTORY;
+    std::unique_ptr<QgsLineString> toLineString( bool force2D = false ) const;
 
     /**
      * Returns a string representation of the quadrilateral.
@@ -207,11 +216,13 @@ class CORE_EXPORT QgsQuadrilateral
      */
     double perimeter() const SIP_HOLDGIL;
 #ifdef SIP_RUN
+// clang-format off
     SIP_PYOBJECT __repr__();
     % MethodCode
-    QString str = QStringLiteral( "<QgsQuadrilateral: %1>" ).arg( sipCpp->toString() );
+    QString str = u"<QgsQuadrilateral: %1>"_s.arg( sipCpp->toString() );
     sipRes = PyUnicode_FromString( str.toUtf8().constData() );
     % End
+// clang-format on
 #endif
   private:
     QgsPoint mPoint1, mPoint2, mPoint3, mPoint4;

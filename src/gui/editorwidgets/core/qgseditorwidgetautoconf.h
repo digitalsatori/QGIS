@@ -15,10 +15,12 @@
 #ifndef QGSEDITORWIDGETAUTOCONF_H
 #define QGSEDITORWIDGETAUTOCONF_H
 
-#include <QList>
-#include "qgis_sip.h"
-#include "qgis_gui.h"
 #include <memory>
+
+#include "qgis_gui.h"
+#include "qgis_sip.h"
+
+#include <QList>
 
 class QgsVectorLayer;
 class QgsEditorWidgetSetup;
@@ -27,12 +29,10 @@ class QgsEditorWidgetSetup;
  * \ingroup gui
  * \brief Base class for plugins allowing to pick automatically a widget type for editing fields.
  *
- * \since QGIS 3.0
  */
 class GUI_EXPORT QgsEditorWidgetAutoConfPlugin
 {
   public:
-
     virtual ~QgsEditorWidgetAutoConfPlugin() = default;
 
     /**
@@ -49,7 +49,6 @@ class GUI_EXPORT QgsEditorWidgetAutoConfPlugin
      * \returns and integer value rating how good is the setup provided by this plugin.
      */
     virtual QgsEditorWidgetSetup editorWidgetSetup( const QgsVectorLayer *vl, const QString &fieldName, int &score SIP_OUT ) const = 0;
-
 };
 
 
@@ -62,12 +61,10 @@ class GUI_EXPORT QgsEditorWidgetAutoConfPlugin
  *
  * The plugins are instances of QgsEditorWidgetAutoConfPlugin.
  * \note not available in Python bindings
- * \since QGIS 3.0
  */
 class GUI_EXPORT QgsEditorWidgetAutoConf SIP_SKIP
 {
   public:
-
     /**
      * Register the default plugins.
      */
@@ -91,7 +88,7 @@ class GUI_EXPORT QgsEditorWidgetAutoConf SIP_SKIP
     void registerPlugin( QgsEditorWidgetAutoConfPlugin *plugin );
 
   private:
-    QList<std::shared_ptr<QgsEditorWidgetAutoConfPlugin> > mPlugins;
+    QList<std::shared_ptr<QgsEditorWidgetAutoConfPlugin>> mPlugins;
 };
 ///@endcond
 

@@ -17,8 +17,8 @@
 #define QGSTEMPORALUTILS_H
 
 #include "qgis_core.h"
-#include "qgsrange.h"
 #include "qgsinterval.h"
+#include "qgsrange.h"
 
 class QgsProject;
 class QgsMapSettings;
@@ -40,7 +40,6 @@ class QgsMapDecoration;
 class CORE_EXPORT QgsTimeDuration
 {
   public:
-
     //! Years
     int years = 0;
     //! Months
@@ -59,23 +58,15 @@ class CORE_EXPORT QgsTimeDuration
     /**
      * Returns TRUE if the duration is null, i.e. an empty duration.
      */
-    bool isNull() const
-    {
-      return !years && !months && !days &&
-             !hours && !minutes && !seconds;
-    }
+    bool isNull() const { return !years && !months && !days && !hours && !minutes && !seconds; }
 
+    // TODO c++20 - replace with = default
     bool operator==( const QgsTimeDuration &other ) const
     {
-      return years == other.years && months == other.months &&
-             days == other.days && hours == other.hours &&
-             minutes == other.minutes && seconds == other.seconds;
+      return years == other.years && months == other.months && weeks == other.weeks && days == other.days && hours == other.hours && minutes == other.minutes && seconds == other.seconds;
     }
 
-    bool operator!=( const QgsTimeDuration &other ) const
-    {
-      return !( *this == other );
-    }
+    bool operator!=( const QgsTimeDuration &other ) const { return !( *this == other ); }
 
     /**
      * Converts the duration to an interval value.
@@ -98,13 +89,12 @@ class CORE_EXPORT QgsTimeDuration
     /**
      * Adds this duration to a starting \a dateTime value.
      */
-    QDateTime addToDateTime( const QDateTime &dateTime );
+    QDateTime addToDateTime( const QDateTime &dateTime ) const;
 
     /**
      * Creates a QgsTimeDuration from a \a string value.
      */
     static QgsTimeDuration fromString( const QString &string, bool &ok );
-
 };
 #endif
 
@@ -120,7 +110,6 @@ class CORE_EXPORT QgsTimeDuration
 class CORE_EXPORT QgsTemporalUtils
 {
   public:
-
     /**
      * Calculates the temporal range for a \a project.
      *
@@ -145,27 +134,67 @@ class CORE_EXPORT QgsTemporalUtils
     //! Contains settings relating to exporting animations
     struct AnimationExportSettings
     {
-      //! Dictates the overall temporal range of the animation.
-      QgsDateTimeRange animationRange;
+        /**
+         * Animation mode.
+         *
+         * \since QGIS 4.4
+         */
+        Qgis::TemporalNavigationMode animationMode = Qgis::TemporalNavigationMode::Animated;
 
-      //! Duration of individual export frames
-      QgsInterval frameDuration;
+        //! Dictates the overall temporal range of the animation.
+        QgsDateTimeRange animationRange;
 
-      //! Destination directory for created image files.
-      QString outputDirectory;
+        //! Duration of individual export frames
+        QgsInterval frameDuration;
 
-      /**
+        /**
+       * The animation temporal range cumulative settings.
+       *
+       * \since QGIS 4.0
+       */
+        bool temporalRangeCumulative = false;
+
+        /**
+         * Total frame count, for Qgis::TemporalNavigationMode::Movie mode only.
+         *
+         * \since QGIS 4.4
+         */
+        long long totalMovieFrames = 0;
+
+        //! Destination directory for created image files.
+        QString outputDirectory;
+
+        /**
        * The filename template for exporting the frames.
        *
-       * This must be in format prefix####.format, where number of
-       * \a # characters represents how many 0's should be left-padded to the frame number
-       * e.g. my###.jpg will create frames my001.jpg, my002.jpg, etc
+       * This must be in format ``prefix####.format``, where number of
+       * \a ``#`` characters represents how many 0's should be left-padded to the frame number
+       * e.g. ``my###.jpg`` will create frames ``my001.jpg``, ``my002.jpg``, etc
        */
-      QString fileNameTemplate;
+        QString fileNameTemplate;
 
-      //! List of decorations to draw onto exported frames.
-      QList<QgsMapDecoration *> decorations;
+        //! List of decorations to draw onto exported frames.
+        QList<QgsMapDecoration *> decorations;
 
+        /**
+       * Contains the list of all available temporal ranges which have data available.
+       *
+       * The list can be a list of non-contiguous ranges (i.e. containing gaps)
+       * which together describe the complete range of times which contain data.
+       *
+       * This list is required whenever the QgsUnitTypes::TemporalIrregularStep interval is used
+       * for an animation.
+       *
+       * \since QGIS 3.30
+       */
+        QList<QgsDateTimeRange> availableTemporalRanges;
+
+        /**
+       * Target animation frame rate in frames per second.
+       *
+       * \since QGIS 3.26
+       */
+        double frameRate = 30;
     };
 
     /**
@@ -208,7 +237,7 @@ class CORE_EXPORT QgsTemporalUtils
      *
      * \since QGIS 3.18
      */
-    static QDateTime calculateFrameTime( const QDateTime &start, const long long frame, const QgsInterval interval );
+    static QDateTime calculateFrameTime( const QDateTime &start, const long long frame, const QgsInterval &interval );
 
     /**
      * Calculates a complete list of datetimes between \a start and \a end, using the specified ISO8601 \a duration string (eg "PT12H").
@@ -249,7 +278,6 @@ class CORE_EXPORT QgsTemporalUtils
      * \since QGIS 3.20
      */
     static QList< QDateTime > calculateDateTimesFromISO8601( const QString &string, bool &ok SIP_OUT, bool &maxValuesExceeded SIP_OUT, int maxValues = -1 );
-
 };
 
 

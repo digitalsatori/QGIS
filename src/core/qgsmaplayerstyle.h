@@ -21,9 +21,8 @@
 
 #include <QByteArray>
 #include <QMap>
-#include <QStringList>
 #include <QObject>
-
+#include <QStringList>
 
 class QDomElement;
 class QgsMapLayer;
@@ -37,7 +36,6 @@ class QgsMapLayer;
  * - it is not possible to access them directly or modify them
  * - it is only possible to read or write layer's current style.
  *
- * \since QGIS 2.8
  */
 class CORE_EXPORT QgsMapLayerStyle
 {
@@ -81,15 +79,13 @@ class CORE_EXPORT QgsMapLayerStyle
 class CORE_EXPORT QgsMapLayerStyleOverride
 {
   public:
-
     /**
      * Construct a style override object associated with a map layer.
      * The overridden style will be restored upon object destruction.
      */
     QgsMapLayerStyleOverride( QgsMapLayer *layer )
       : mLayer( layer )
-    {
-    }
+    {}
 
     ~QgsMapLayerStyleOverride();
 
@@ -100,7 +96,6 @@ class CORE_EXPORT QgsMapLayerStyleOverride
     void setOverrideStyle( const QString &style );
 
   private:
-
     QgsMapLayer *mLayer = nullptr;
     bool mStyleOverridden = false;
 };

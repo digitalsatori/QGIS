@@ -16,6 +16,7 @@
  ***************************************************************************/
 
 #include "qgsfeaturefilterprovidergroup.h"
+
 #include "qgsfeaturerequest.h"
 
 void QgsFeatureFilterProviderGroup::filterFeatures( const QgsVectorLayer *layer, QgsFeatureRequest &filterFeatures ) const
@@ -23,7 +24,9 @@ void QgsFeatureFilterProviderGroup::filterFeatures( const QgsVectorLayer *layer,
   for ( const QgsFeatureFilterProvider *provider : mProviders )
   {
     QgsFeatureRequest temp;
+    Q_NOWARN_DEPRECATED_PUSH
     provider->filterFeatures( layer, temp );
+    Q_NOWARN_DEPRECATED_POP
     if ( auto *lFilterExpression = temp.filterExpression() )
     {
       filterFeatures.combineFilterExpression( lFilterExpression->dump() );
@@ -36,13 +39,13 @@ QStringList QgsFeatureFilterProviderGroup::layerAttributes( const QgsVectorLayer
   QStringList allowedAttributes { attributes };
   for ( const QgsFeatureFilterProvider *provider : mProviders )
   {
-    QgsFeatureRequest temp;
+    const QgsFeatureRequest temp;
     allowedAttributes = provider->layerAttributes( layer, allowedAttributes );
   }
   return allowedAttributes;
 }
 
-QgsFeatureFilterProvider *QgsFeatureFilterProviderGroup::clone() const
+QgsFeatureFilterProviderGroup *QgsFeatureFilterProviderGroup::clone() const
 {
   auto result = new QgsFeatureFilterProviderGroup();
   result->mProviders = mProviders;

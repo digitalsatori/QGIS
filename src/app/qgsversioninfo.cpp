@@ -14,20 +14,27 @@
  ***************************************************************************/
 
 #include "qgsversioninfo.h"
+
 #include "qgis.h"
 #include "qgsapplication.h"
 #include "qgsnetworkaccessmanager.h"
+
+#include <QString>
 #include <QUrl>
+
+#include "moc_qgsversioninfo.cpp"
+
+using namespace Qt::StringLiterals;
 
 QgsVersionInfo::QgsVersionInfo( QObject *parent )
   : QObject( parent )
-{
-
-}
+{}
 
 void QgsVersionInfo::checkVersion()
 {
-  QNetworkReply *reply = QgsNetworkAccessManager::instance()->get( QNetworkRequest( QUrl( QStringLiteral( "https://version.qgis.org/version.txt" ) ) ) );
+  QNetworkRequest request( QUrl( u"https://version.qgis.org/version.txt"_s ) );
+  request.setAttribute( QNetworkRequest::CacheLoadControlAttribute, QNetworkRequest::AlwaysNetwork );
+  QNetworkReply *reply = QgsNetworkAccessManager::instance()->get( request );
   connect( reply, &QNetworkReply::finished, this, &QgsVersionInfo::versionReplyFinished );
 }
 
@@ -54,7 +61,7 @@ void QgsVersionInfo::versionReplyFinished()
     QString versionMessage = reply->readAll();
 
     // strip the header
-    QString contentFlag = QStringLiteral( "#QGIS Version" );
+    const QString contentFlag = u"#QGIS Version"_s;
     int pos = versionMessage.indexOf( contentFlag );
 
     if ( pos > -1 )
@@ -62,11 +69,7 @@ void QgsVersionInfo::versionReplyFinished()
       pos += contentFlag.length();
 
       versionMessage = versionMessage.mid( pos );
-#if QT_VERSION < QT_VERSION_CHECK(5, 15, 0)
-      QStringList parts = versionMessage.split( '|', QString::SkipEmptyParts );
-#else
       QStringList parts = versionMessage.split( '|', Qt::SkipEmptyParts );
-#endif
       // check the version from the  server against our version
       mLatestVersion = parts[0].toInt();
       mDownloadInfo = parts.value( 1 );

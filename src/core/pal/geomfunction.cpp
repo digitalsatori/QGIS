@@ -28,12 +28,15 @@
  */
 
 #include "geomfunction.h"
-#include "feature.h"
-#include "util.h"
-#include "qgis.h"
-#include "pal.h"
-#include "qgsmessagelog.h"
+
 #include <vector>
+
+#include "feature.h"
+#include "pal.h"
+#include "qgis.h"
+#include "qgsgeometryutils_base.h"
+#include "qgsmessagelog.h"
+#include "util.h"
 
 using namespace pal;
 
@@ -54,7 +57,8 @@ void heapsort( std::vector< int > &sid, int *id, const std::vector< double > &x,
     else
     {
       n--;
-      if ( n == 0 ) return;
+      if ( n == 0 )
+        return;
       tx = sid[n];
       sid[n] = sid[0];
     }
@@ -62,7 +66,7 @@ void heapsort( std::vector< int > &sid, int *id, const std::vector< double > &x,
     child = i * 2 + 1;
     while ( child < n )
     {
-      if ( child + 1 < n  &&  x[id[sid[child + 1]]] > x[id[sid[child]]] )
+      if ( child + 1 < n && x[id[sid[child + 1]]] > x[id[sid[child]]] )
       {
         child++;
       }
@@ -101,7 +105,8 @@ void heapsort2( int *x, double *heap, std::size_t N )
     else
     {
       n--;
-      if ( n == 0 ) return;
+      if ( n == 0 )
+        return;
       t = heap[n];
       tx = x[n];
       heap[n] = heap[0];
@@ -111,7 +116,7 @@ void heapsort2( int *x, double *heap, std::size_t N )
     child = i * 2 + 1;
     while ( child < n )
     {
-      if ( child + 1 < n  &&  heap[child + 1] > heap[child] )
+      if ( child + 1 < n && heap[child + 1] > heap[child] )
       {
         child++;
       }
@@ -132,18 +137,33 @@ void heapsort2( int *x, double *heap, std::size_t N )
   }
 }
 
-bool GeomFunction::isSegIntersects( double x1, double y1, double x2, double y2,  // 1st segment
-                                    double x3, double y3, double x4, double y4 )  // 2nd segment
+bool GeomFunction::isSegIntersects(
+  double x1,
+  double y1,
+  double x2,
+  double y2, // 1st segment
+  double x3,
+  double y3,
+  double x4,
+  double y4
+) // 2nd segment
 {
-  return ( cross_product( x1, y1, x2, y2, x3, y3 ) * cross_product( x1, y1, x2, y2, x4, y4 ) < 0
-           && cross_product( x3, y3, x4, y4, x1, y1 ) * cross_product( x3, y3, x4, y4, x2, y2 ) < 0 );
+  return ( cross_product( x1, y1, x2, y2, x3, y3 ) * cross_product( x1, y1, x2, y2, x4, y4 ) < 0 && cross_product( x3, y3, x4, y4, x1, y1 ) * cross_product( x3, y3, x4, y4, x2, y2 ) < 0 );
 }
 
-bool GeomFunction::computeLineIntersection( double x1, double y1, double x2, double y2,  // 1st line (segment)
-    double x3, double y3, double x4, double y4,  // 2nd line segment
-    double *x, double *y )
+bool GeomFunction::computeLineIntersection(
+  double x1,
+  double y1,
+  double x2,
+  double y2, // 1st line (segment)
+  double x3,
+  double y3,
+  double x4,
+  double y4, // 2nd line segment
+  double *x,
+  double *y
+)
 {
-
   double a1, a2, b1, b2, c1, c2;
   double denom;
 
@@ -220,18 +240,17 @@ std::vector< int > GeomFunction::convexHullId( std::vector< int > &id, const std
 
   for ( std::size_t i = ref; i < x.size(); i++ )
   {
-    double result = cross_product( x[id[stack[second]]], y[id[stack[second]]],
-                                   x[id[stack[top]]], y[id[stack[top]]], x[id[convexHull[i]]], y[id[convexHull[i]]] );
+    double result = cross_product( x[id[stack[second]]], y[id[stack[second]]], x[id[stack[top]]], y[id[stack[top]]], x[id[convexHull[i]]], y[id[convexHull[i]]] );
     // Coolineaire !! garder le plus éloigné
     if ( qgsDoubleNear( result, 0.0 ) )
     {
-      if ( dist_euc2d_sq( x[id[stack[second]]], y[id[stack[second]]], x[id[convexHull[i]]], y[id[convexHull[i]]] )
-           >  dist_euc2d_sq( x[id[stack[second]]], y[id[stack[second]]], x[id[stack[top]]], y[id[stack[top]]] ) )
+      if ( QgsGeometryUtilsBase::sqrDistance2D( x[id[stack[second]]], y[id[stack[second]]], x[id[convexHull[i]]], y[id[convexHull[i]]] )
+           > QgsGeometryUtilsBase::sqrDistance2D( x[id[stack[second]]], y[id[stack[second]]], x[id[stack[top]]], y[id[stack[top]]] ) )
       {
         stack[top] = convexHull[i];
       }
     }
-    else if ( result > 0 ) //convexe
+    else if ( result > 0 ) //convex
     {
       second++;
       top++;
@@ -243,9 +262,7 @@ std::vector< int > GeomFunction::convexHullId( std::vector< int > &id, const std
       {
         second--;
         top--;
-        result = cross_product( x[id[stack[second]]],
-                                y[id[stack[second]]], x[id[stack[top]]],
-                                y[id[stack[top]]], x[id[convexHull[i]]], y[id[convexHull[i]]] );
+        result = cross_product( x[id[stack[second]]], y[id[stack[second]]], x[id[stack[top]]], y[id[stack[top]]], x[id[convexHull[i]]], y[id[convexHull[i]]] );
       }
       second++;
       top++;
@@ -307,63 +324,35 @@ bool GeomFunction::containsCandidate( const GEOSPreparedGeometry *geom, double x
 
   try
   {
-    GEOSContextHandle_t geosctxt = QgsGeos::getGEOSHandler();
+    GEOSContextHandle_t geosctxt = QgsGeosContext::get();
     GEOSCoordSequence *coord = GEOSCoordSeq_create_r( geosctxt, 5, 2 );
 
-#if GEOS_VERSION_MAJOR>3 || GEOS_VERSION_MINOR>=8
     GEOSCoordSeq_setXY_r( geosctxt, coord, 0, x, y );
-#else
-    GEOSCoordSeq_setX_r( geosctxt, coord, 0, x );
-    GEOSCoordSeq_setY_r( geosctxt, coord, 0, y );
-#endif
     if ( !qgsDoubleNear( alpha, 0.0 ) )
     {
-      double beta = alpha + M_PI_2;
-      double dx1 = std::cos( alpha ) * width;
-      double dy1 = std::sin( alpha ) * width;
-      double dx2 = std::cos( beta ) * height;
-      double dy2 = std::sin( beta ) * height;
-#if GEOS_VERSION_MAJOR>3 || GEOS_VERSION_MINOR>=8
-      GEOSCoordSeq_setXY_r( geosctxt, coord, 1, x  + dx1, y + dy1 );
+      const double beta = alpha + M_PI_2;
+      const double dx1 = std::cos( alpha ) * width;
+      const double dy1 = std::sin( alpha ) * width;
+      const double dx2 = std::cos( beta ) * height;
+      const double dy2 = std::sin( beta ) * height;
+      GEOSCoordSeq_setXY_r( geosctxt, coord, 1, x + dx1, y + dy1 );
       GEOSCoordSeq_setXY_r( geosctxt, coord, 2, x + dx1 + dx2, y + dy1 + dy2 );
       GEOSCoordSeq_setXY_r( geosctxt, coord, 3, x + dx2, y + dy2 );
-#else
-      GEOSCoordSeq_setX_r( geosctxt, coord, 1, x  + dx1 );
-      GEOSCoordSeq_setY_r( geosctxt, coord, 1, y + dy1 );
-      GEOSCoordSeq_setX_r( geosctxt, coord, 2, x + dx1 + dx2 );
-      GEOSCoordSeq_setY_r( geosctxt, coord, 2, y + dy1 + dy2 );
-      GEOSCoordSeq_setX_r( geosctxt, coord, 3, x + dx2 );
-      GEOSCoordSeq_setY_r( geosctxt, coord, 3, y + dy2 );
-#endif
     }
     else
     {
-#if GEOS_VERSION_MAJOR>3 || GEOS_VERSION_MINOR>=8
       GEOSCoordSeq_setXY_r( geosctxt, coord, 1, x + width, y );
       GEOSCoordSeq_setXY_r( geosctxt, coord, 2, x + width, y + height );
       GEOSCoordSeq_setXY_r( geosctxt, coord, 3, x, y + height );
-#else
-      GEOSCoordSeq_setX_r( geosctxt, coord, 1, x + width );
-      GEOSCoordSeq_setY_r( geosctxt, coord, 1, y );
-      GEOSCoordSeq_setX_r( geosctxt, coord, 2, x + width );
-      GEOSCoordSeq_setY_r( geosctxt, coord, 2, y + height );
-      GEOSCoordSeq_setX_r( geosctxt, coord, 3, x );
-      GEOSCoordSeq_setY_r( geosctxt, coord, 3, y + height );
-#endif
     }
     //close ring
-#if GEOS_VERSION_MAJOR>3 || GEOS_VERSION_MINOR>=8
     GEOSCoordSeq_setXY_r( geosctxt, coord, 4, x, y );
-#else
-    GEOSCoordSeq_setX_r( geosctxt, coord, 4, x );
-    GEOSCoordSeq_setY_r( geosctxt, coord, 4, y );
-#endif
 
     geos::unique_ptr bboxGeos( GEOSGeom_createLinearRing_r( geosctxt, coord ) );
-    bool result = ( GEOSPreparedContainsProperly_r( geosctxt, geom, bboxGeos.get() ) == 1 );
+    const bool result = ( GEOSPreparedContainsProperly_r( geosctxt, geom, bboxGeos.get() ) == 1 );
     return result;
   }
-  catch ( GEOSException &e )
+  catch ( QgsGeosException &e )
   {
     qWarning( "GEOS exception: %s", e.what() );
     Q_NOWARN_UNREACHABLE_PUSH
@@ -374,9 +363,7 @@ bool GeomFunction::containsCandidate( const GEOSPreparedGeometry *geom, double x
   return false;
 }
 
-void GeomFunction::findLineCircleIntersection( double cx, double cy, double radius,
-    double x1, double y1, double x2, double y2,
-    double &xRes, double &yRes )
+void GeomFunction::findLineCircleIntersection( double cx, double cy, double radius, double x1, double y1, double x2, double y2, double &xRes, double &yRes )
 {
   double multiplier = 1;
   if ( radius < 10 )
@@ -393,14 +380,14 @@ void GeomFunction::findLineCircleIntersection( double cx, double cy, double radi
     radius *= multiplier;
   }
 
-  double dx = x2 - x1;
-  double dy = y2 - y1;
+  const double dx = x2 - x1;
+  const double dy = y2 - y1;
 
-  double A = dx * dx + dy * dy;
-  double B = 2 * ( dx * ( x1 - cx ) + dy * ( y1 - cy ) );
-  double C = ( x1 - cx ) * ( x1 - cx ) + ( y1 - cy ) * ( y1 - cy ) - radius * radius;
+  const double A = dx * dx + dy * dy;
+  const double B = 2 * ( dx * ( x1 - cx ) + dy * ( y1 - cy ) );
+  const double C = ( x1 - cx ) * ( x1 - cx ) + ( y1 - cy ) * ( y1 - cy ) - radius * radius;
 
-  double det = B * B - 4 * A * C;
+  const double det = B * B - 4 * A * C;
   if ( A <= 0.000000000001 || det < 0 )
     // Should never happen, No real solutions.
     return;
@@ -408,7 +395,7 @@ void GeomFunction::findLineCircleIntersection( double cx, double cy, double radi
   if ( qgsDoubleNear( det, 0.0 ) )
   {
     // Could potentially happen.... One solution.
-    double t = -B / ( 2 * A );
+    const double t = -B / ( 2 * A );
     xRes = x1 + t * dx;
     yRes = y1 + t * dy;
   }
@@ -417,7 +404,7 @@ void GeomFunction::findLineCircleIntersection( double cx, double cy, double radi
     // Two solutions.
     // Always use the 1st one
     // We only really have one solution here, as we know the line segment will start in the circle and end outside
-    double t = ( -B + std::sqrt( det ) ) / ( 2 * A );
+    const double t = ( -B + std::sqrt( det ) ) / ( 2 * A );
     xRes = x1 + t * dx;
     yRes = y1 + t * dy;
   }

@@ -18,22 +18,24 @@
 #ifndef GPSDATA_H
 #define GPSDATA_H
 
+#include <expat.h>
 #include <limits>
 
-#include <expat.h>
+#include "qgsfeatureid.h"
+#include "qgsrectangle.h"
+
+#include <QDateTime>
+#include <QMutex>
+#include <QStack>
 #include <QString>
 #include <QTextStream>
-#include <QStack>
-
-#include "qgsrectangle.h"
-#include "qgsfeatureid.h"
 
 // workaround for MSVC compiler which already has defined macro max
 // that interferes with calling std::numeric_limits<int>::max
 #ifdef _MSC_VER
-# ifdef max
-#  undef max
-# endif
+#ifdef max
+#undef max
+#endif
 #endif
 
 /**
@@ -91,6 +93,7 @@ class QgsWaypoint : public QgsGpsPoint
   public:
     void writeXml( QTextStream &stream ) override;
     QgsFeatureId id;
+    QDateTime time;
 };
 
 
@@ -136,7 +139,6 @@ class QgsTrack : public QgsGpsExtended
 class QgsGpsData
 {
   public:
-
     //! This iterator type is used to iterate over waypoints.
     typedef QList<QgsWaypoint>::iterator WaypointIterator;
     //! This iterator type is used to iterate over routes.
@@ -202,8 +204,7 @@ class QgsGpsData
      * waypoint will be returned (it will be waypointsEnd() if the waypoint
      * couldn't be added.
     */
-    WaypointIterator addWaypoint( double lat, double lon, const QString &name = "",
-                                  double ele = -std::numeric_limits<double>::max() );
+    WaypointIterator addWaypoint( double lat, double lon, const QString &name = "", double ele = -std::numeric_limits<double>::max() );
 
     WaypointIterator addWaypoint( const QgsWaypoint &wpt );
 
@@ -264,7 +265,6 @@ class QgsGpsData
     //friend std::ostream& operator<<(std::ostream& os, const GPSData& d);
 
   protected:
-
     QList<QgsWaypoint> waypoints;
     QList<QgsRoute> routes;
     QList<QgsTrack> tracks;
@@ -273,17 +273,18 @@ class QgsGpsData
     double xMin, xMax, yMin, yMax;
 
     //! This is used internally to store GPS data objects (one per file).
-    typedef QMap<QString, QPair<QgsGpsData *, unsigned> > DataMap;
+    typedef QMap<QString, QPair<QgsGpsData *, unsigned>> DataMap;
 
     /**
      * This is the static container that maps file names to GPSData objects and
      * does reference counting, so several providers can use the same GPSData
      * object.
     */
-    static DataMap dataObjects;
+    static DataMap sDataObjects;
 
+    //! Mutex for sDataObjects
+    static QRecursiveMutex sDataObjectsMutex;
 };
-
 
 
 class QgsGPXHandler
@@ -291,7 +292,7 @@ class QgsGPXHandler
   public:
     explicit QgsGPXHandler( QgsGpsData &data )
       : mData( data )
-    { }
+    {}
 
     /**
      * This function is called when expat encounters a new start element in
@@ -313,21 +314,11 @@ class QgsGPXHandler
 
     // static wrapper functions for the XML handler functions (expat is in C,
     // it does not know about member functions)
-    static void start( void *data, const XML_Char *el, const XML_Char **attr )
-    {
-      static_cast<QgsGPXHandler *>( data )->startElement( el, attr );
-    }
-    static void end( void *data, const XML_Char *el )
-    {
-      static_cast<QgsGPXHandler *>( data )->endElement( el );
-    }
-    static void chars( void *data, const XML_Char *chars, int len )
-    {
-      static_cast<QgsGPXHandler *>( data )->characters( chars, len );
-    }
+    static void start( void *data, const XML_Char *el, const XML_Char **attr ) { static_cast<QgsGPXHandler *>( data )->startElement( el, attr ); }
+    static void end( void *data, const XML_Char *el ) { static_cast<QgsGPXHandler *>( data )->endElement( el ); }
+    static void chars( void *data, const XML_Char *chars, int len ) { static_cast<QgsGPXHandler *>( data )->characters( chars, len ); }
 
   private:
-
     enum ParseMode
     {
       ParsingDocument,
@@ -340,6 +331,7 @@ class QgsGPXHandler
       ParsingDouble,
       ParsingInt,
       ParsingString,
+      ParsingDateTime,
       ParsingUnknown
     };
 
@@ -357,6 +349,7 @@ class QgsGPXHandler
     QString *mString = nullptr;
     double *mDouble = nullptr;
     int *mInt = nullptr;
+    QDateTime *mDateTime = nullptr;
     QString mCharBuffer;
 };
 

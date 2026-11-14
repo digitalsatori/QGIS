@@ -18,18 +18,25 @@
 #ifndef QGSLOCATOR_H
 #define QGSLOCATOR_H
 
-#include <QObject>
-#include <QFuture>
-#include <QFutureWatcher>
-#include <QMap>
 #include <memory>
 
 #include "qgis_core.h"
 #include "qgis_sip.h"
-#include "qgslocatorfilter.h"
 #include "qgsfeedback.h"
 #include "qgslocatorcontext.h"
-#include "qgssettingsentry.h"
+#include "qgslocatorfilter.h"
+#include "qgssettingstree.h"
+
+#include <QFuture>
+#include <QFutureWatcher>
+#include <QMap>
+#include <QObject>
+#include <QString>
+
+using namespace Qt::StringLiterals;
+
+class QgsSettingsEntryBool;
+class QgsSettingsEntryString;
 
 
 /**
@@ -53,14 +60,12 @@
  * encounters an individual result, it will usually be triggered many times for a single
  * call to fetchResults().
  *
- * \since QGIS 3.0
 */
 class CORE_EXPORT QgsLocator : public QObject
 {
     Q_OBJECT
 
   public:
-
     //! List of core filters (i.e. not plugin filters)
     static const QList<QString> CORE_FILTERS;
 
@@ -105,7 +110,7 @@ class CORE_EXPORT QgsLocator : public QObject
      * Returns a map of prefix to filter, for all registered filters
      * with valid prefixes.
      * \see filters()
-     * \deprecated since QGIS 3.2 use filters() instead
+     * \deprecated QGIS 3.2. Use filters() instead.
      */
     Q_DECL_DEPRECATED QMap<QString, QgsLocatorFilter *> prefixedFilters() const;
 
@@ -151,14 +156,18 @@ class CORE_EXPORT QgsLocator : public QObject
      * This list is updated when preparing the search
      * \since QGIS 3.16
      */
-    QStringList completionList() const {return mAutocompletionList;}
+    QStringList completionList() const { return mAutocompletionList; }
+
+#ifndef SIP_RUN
+    static inline QgsSettingsTreeNamedListNode *sTreeLocatorFilters = QgsSettingsTree::treeRoot()->createNamedListNode( u"locator-filters"_s );
 
     //! Settings entry locator filter enabled
-    static const inline QgsSettingsEntryBool settingsLocatorFilterEnabled = QgsSettingsEntryBool( QStringLiteral( "locator_filters/enabled_%1" ), QgsSettings::Gui, true, "Locator filter enabled" );
+    static const QgsSettingsEntryBool *settingsLocatorFilterEnabled;
     //! Settings entry locator filter default value
-    static const inline QgsSettingsEntryBool settingsLocatorFilterDefault = QgsSettingsEntryBool( QStringLiteral( "locator_filters/default_%1" ), QgsSettings::Gui, false, "Locator filter default value" );
+    static const QgsSettingsEntryBool *settingsLocatorFilterDefault;
     //! Settings entry locator filter prefix
-    static const inline QgsSettingsEntryString settingsLocatorFilterPrefix = QgsSettingsEntryString( QStringLiteral( "locator_filters/prefix_%1" ), QgsSettings::Gui, QString(), "Locator filter prefix" );
+    static const QgsSettingsEntryString *settingsLocatorFilterPrefix;
+#endif
 
   signals:
 
@@ -186,7 +195,6 @@ class CORE_EXPORT QgsLocator : public QObject
     void filterSentResult( QgsLocatorResult result );
 
   private:
-
     QgsFeedback *mFeedback = nullptr;
     std::unique_ptr< QgsFeedback > mOwnedFeedback;
 
@@ -196,9 +204,6 @@ class CORE_EXPORT QgsLocator : public QObject
     QStringList mAutocompletionList;
 
     void cancelRunningQuery();
-
 };
 
 #endif // QGSLOCATOR_H
-
-

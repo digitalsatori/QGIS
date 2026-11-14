@@ -18,16 +18,12 @@
 #ifndef QGSPOINTCLOUDBLOCKREQUEST_H
 #define QGSPOINTCLOUDBLOCKREQUEST_H
 
+#include "qgspointcloudindex.h"
+#include "qgstiledownloadmanager.h"
+
 #include <QObject>
 
-#include "qgspointcloudattribute.h"
-#include "qgstiledownloadmanager.h"
-#include "qgspointcloudindex.h"
-
 #define SIP_NO_FILE
-
-class QgsPointCloudAttributeCollection;
-class QgsPointCloudBlock;
 
 /**
  * \ingroup core
@@ -41,35 +37,47 @@ class CORE_EXPORT QgsPointCloudBlockRequest : public QObject
 {
     Q_OBJECT
   public:
-
     /**
      * QgsPointCloudBlockRequest constructor
      * Note: It is the responsablitiy of the caller to delete the block if it was loaded correctly
      */
-    QgsPointCloudBlockRequest( const IndexedPointCloudNode &node, const QString &Uri, const QString &dataType, const QgsPointCloudAttributeCollection &attributes, const QgsPointCloudAttributeCollection &requestedAttributes );
+    QgsPointCloudBlockRequest(
+      QgsPointCloudNodeId node,
+      const QString &Uri,
+      const QgsPointCloudAttributeCollection &attributes,
+      const QgsPointCloudAttributeCollection &requestedAttributes,
+      const QgsVector3D &scale,
+      const QgsVector3D &offset,
+      const QgsPointCloudExpression &filterExpression,
+      const QgsRectangle &filterRect
+    );
+
+
+    ~QgsPointCloudBlockRequest() override = 0;
 
     /**
-     * Returns the requested block. if the returned block is nullptr, that means the data request failed
-     * Note: It is the responsablitiy of the caller to delete the block if it was loaded correctly
+     * Returns the requested block. if the returned block is nullptr, that means the data request failed.
      */
-    QgsPointCloudBlock *block();
+    std::unique_ptr<QgsPointCloudBlock> takeBlock();
 
     //! Returns the error message string of the request
-    QString errorStr();
+    QString errorStr() const;
 
   signals:
     //! Emitted when the request processing has finished
     void finished();
-  private:
-    IndexedPointCloudNode mNode;
-    QString mDataType;
+
+  protected:
+    QgsPointCloudNodeId mNode;
+    QString mUri;
     QgsPointCloudAttributeCollection mAttributes;
     QgsPointCloudAttributeCollection mRequestedAttributes;
-    std::unique_ptr<QgsTileDownloadManagerReply> mTileDownloadManagetReply = nullptr;
-    QgsPointCloudBlock *mBlock = nullptr;
+    std::unique_ptr<QgsTileDownloadManagerReply> mTileDownloadManagerReply = nullptr;
+    std::unique_ptr<QgsPointCloudBlock> mBlock;
     QString mErrorStr;
-  private slots:
-    void blockFinishedLoading();
+    QgsVector3D mScale, mOffset;
+    QgsPointCloudExpression mFilterExpression;
+    QgsRectangle mFilterRect;
 };
 
 #endif // QGSPOINTCLOUDBLOCKREQUEST_H

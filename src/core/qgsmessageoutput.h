@@ -17,11 +17,12 @@
 #ifndef QGSMESSAGEOUTPUT_H
 #define QGSMESSAGEOUTPUT_H
 
-#include <QString>
-#include "qgis_sip.h"
-#include <QObject>
-
+#include "qgis.h"
 #include "qgis_core.h"
+#include "qgis_sip.h"
+
+#include <QObject>
+#include <QString>
 
 class QgsMessageOutput;
 typedef QgsMessageOutput *( *MESSAGE_OUTPUT_CREATOR )() SIP_SKIP;
@@ -43,14 +44,10 @@ typedef QgsMessageOutput *( *MESSAGE_OUTPUT_CREATOR )() SIP_SKIP;
 class CORE_EXPORT QgsMessageOutput
 {
   public:
-
-    //! message can be in plain text or in html format
-    enum MessageType { MessageText, MessageHtml };
-
     virtual ~QgsMessageOutput() = default;
 
     //! Sets message, it won't be displayed until
-    virtual void setMessage( const QString &message, MessageType msgType ) = 0;
+    virtual void setMessage( const QString &message, Qgis::StringFormat format ) = 0;
 
     //! message to be appended to the current text
     virtual void appendMessage( const QString &message ) = 0;
@@ -63,9 +60,8 @@ class CORE_EXPORT QgsMessageOutput
 
     /**
      * Display the blocking message to the user.
-     *  \since QGIS 2.10
      */
-    static void showMessage( const QString &title, const QString &message, MessageType msgType );
+    static void showMessage( const QString &title, const QString &message, Qgis::StringFormat format );
 
     // TODO: implementation where Python class could be passed
 
@@ -82,7 +78,6 @@ class CORE_EXPORT QgsMessageOutput
     static QgsMessageOutput *createMessageOutput();
 
   private:
-
     //! Pointer to the function which creates the class for output
     static MESSAGE_OUTPUT_CREATOR mMessageOutputCreator;
 };
@@ -90,7 +85,7 @@ class CORE_EXPORT QgsMessageOutput
 
 /**
  * \ingroup core
- * \brief Default implementation of message output interface
+ * \brief Default implementation of message output interface.
  *
  * This class outputs messages to the standard output. Therefore it might
  * be the right choice for apps without GUI.
@@ -100,13 +95,9 @@ class CORE_EXPORT QgsMessageOutputConsole : public QObject, public QgsMessageOut
     Q_OBJECT
 
   public:
-
-    /**
-     * Constructor for QgsMessageOutputConsole.
-     */
     QgsMessageOutputConsole() = default;
 
-    void setMessage( const QString &message, MessageType msgType ) override;
+    void setMessage( const QString &message, Qgis::StringFormat format ) override;
 
     void appendMessage( const QString &message ) override;
 
@@ -121,14 +112,13 @@ class CORE_EXPORT QgsMessageOutputConsole : public QObject, public QgsMessageOut
     void destroyed();
 
   private:
-
     //! stores current message
     QString mMessage;
 
     //! stores current title
     QString mTitle;
 
-    MessageType mMsgType = MessageText;
+    Qgis::StringFormat mFormat = Qgis::StringFormat::PlainText;
 };
 
 #endif
